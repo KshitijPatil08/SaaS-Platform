@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { useMrrSeries, MrrPoint } from '../hooks/useKpis'
 
 interface MRRData {
   month: string
@@ -7,23 +8,15 @@ interface MRRData {
   newMRR: number
 }
 
-const generateData = (): MRRData[] => {
-  const baseMRR = 45000
-  const newMRR = 8000
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-  return months.map((month, index) => {
-    const growthFactor = 0.05 * index
-    const mrr = baseMRR * (1 + growthFactor) + Math.random() * 2000
-    const newMRR = newMRR * (1 + growthFactor) + Math.random() * 500
-
-    return { month, mrr: Math.round(mrr / 100) * 100, newMRR: Math.round(newMRR / 100) * 100 }
-  })
-}
-
 const MRRChart: React.FC = () => {
-  const [data] = useState<MRRData[]>(generateData())
+  const { data: series, isLoading } = useMrrSeries()
   const [hoveredMonth, setHoveredMonth] = useState<MRRData | null>(null)
+
+  const data: MRRData[] = (series ?? []).map((p: MrrPoint) => ({
+    month: new Date(p.date).toLocaleDateString('en-US', { month: 'short' }),
+    mrr: p.mrr,
+    newMRR: p.newMrr,
+  }))
 
   const calculateTotalMRR = () => {
     return data.reduce((sum, item) => sum + item.mrr, 0)
@@ -62,6 +55,7 @@ const MRRChart: React.FC = () => {
 
   return (
     <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-xl p-6 shadow-xl border border-slate-200 dark:border-slate-700">
+      {isLoading && <p className="text-sm text-slate-500 mb-4">Loading MRR…</p>}
       <div className="grid grid-cols-1 md:grid-cols-3 mb-6">
         <div>
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">Monthly Recurring Revenue</h3>
@@ -70,12 +64,12 @@ const MRRChart: React.FC = () => {
         </div>
         <div>
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">Current MRR</h3>
-          <p className="text-3xl font-bold text-purple-600">${data[data.length - 1].mrr.toLocaleString()}</p>
+          <p className="text-3xl font-bold text-purple-600">${data.length ? data[data.length - 1].mrr.toLocaleString() : 0}</p>
           <p className="text-sm text-slate-600 dark:text-slate-400">+4.6% from last month</p>
         </div>
         <div>
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">New MRR</h3>
-          <p className="text-3xl font-bold text-blue-600">${data[data.length - 1].newMRR.toLocaleString()}</p>
+          <p className="text-3xl font-bold text-blue-600">${data.length ? data[data.length - 1].newMRR.toLocaleString() : 0}</p>
           <p className="text-sm text-slate-600 dark:text-slate-400">+2.1% from last month</p>
         </div>
       </div>

@@ -1,0 +1,29 @@
+version: '3.9'
+
+# Option 2 deployment: frontend + backend only.
+# The PostgreSQL database is client-managed (RDS, Azure, on-prem).
+# Point DATABASE_URL in .env to the client's database.
+
+services:
+  web:
+    build:
+      context: ./apps/web
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./apps/api
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./apps/api/.env
+    environment:
+      # DATABASE_URL must point to the client's PostgreSQL instance.
+      # Example: postgresql://pulse_user:pass@customer-rds.example.com:5432/pulse
+      DATABASE_URL: ${DATABASE_URL}
+      NODE_ENV: production
+    restart: unless-stopped

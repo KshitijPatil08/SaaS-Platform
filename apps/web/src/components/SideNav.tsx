@@ -1,39 +1,54 @@
 import React from 'react'
-import { Link } from 'react-router-dom'
-import '@pulse/web/styles/global.css'
+import { NavLink } from 'react-router-dom'
+import { LayoutDashboard, Filter, Activity, Users, AlertTriangle } from 'lucide-react'
 
-interface INavItem {
+interface NavItem {
   label: string
   path: string
-  icon: string
-  active?: boolean
+  icon: React.ReactNode
+  badge?: number
 }
 
-const NAV_ITEMS: INavItem[] = [
-  { label: 'Dashboard', path: '/', icon: 'dashboard', active: true },
-  { label: 'Funnel', path: '/funnel', icon: 'funnel', active: false },
-  { label: 'Health Ring', path: '/health', icon: 'ring', active: false },
-  { label: 'Recent Accounts', path: '/accounts', icon: 'users', active: false },
-  { label: 'Churn Risk', path: '/churn', icon: 'warning', active: false },
+const NAV_ITEMS: NavItem[] = [
+  { label: 'Dashboard', path: '/', icon: <LayoutDashboard className="h-5 w-5" /> },
+  { label: 'Funnel', path: '/funnel', icon: <Filter className="h-5 w-5" /> },
+  { label: 'Health Ring', path: '/health', icon: <Activity className="h-5 w-5" /> },
+  { label: 'Recent Accounts', path: '/accounts', icon: <Users className="h-5 w-5" />, badge: 12 },
+  { label: 'Churn Risk', path: '/churn', icon: <AlertTriangle className="h-5 w-5" />, badge: 3 },
 ]
 
 const SideNav: React.FC = () => {
   return (
-    <nav className="fixed w-64 h-full bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900 text-white">
-      <div className="p-4 space-y-2">
-        {NAV_ITEMS.map(item => (
-          <div key={item.path} className="flex items-center px-3 hover:bg-opacity-10 transition-opacity group">
-            <div className="group-hover:bg-opacity-20">
-              <svg className="h-5 w-5 text-white group:after:absolute group:after:rounded-lg group:after:ml-2\/4" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M19 3h-4v17h4zm-9.59 3.37l-2.38 2.38A2.4 2.4 0 0 1 8 15.6a2.4 2.4 0 0 1-3.41-2.06Z"/>
-              </svg>
-              <span className="text-xl font-semibold">{item.label}</span>
-            </div>
-            {item.active && <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 14 12">
-              <line x1="1" y1="1" x2="13" y2="11"/>
-            </svg>}
-          </div>
-        )}
+    <nav className="fixed left-0 top-0 w-64 h-full bg-gradient-to-b from-slate-900 via-slate-950 to-black text-slate-100 z-20 shadow-2xl">
+      <div className="p-6">
+        <h2 className="text-2xl font-bold text-glow bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
+          Pulse
+        </h2>
+        <p className="text-xs text-slate-400 mt-1">Analytics Suite</p>
+      </div>
+      <div className="px-3 space-y-1">
+        {NAV_ITEMS.map((item) => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            end={item.path === '/'}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
+                isActive
+                  ? 'bg-purple-600/20 text-purple-300 border-l-4 border-purple-500'
+                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+              }`
+            }
+          >
+            {item.icon}
+            <span className="text-sm font-medium">{item.label}</span>
+            {item.badge && (
+              <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-rose-500/20 text-rose-300">
+                {item.badge}
+              </span>
+            )}
+          </NavLink>
+        ))}
       </div>
     </nav>
   )

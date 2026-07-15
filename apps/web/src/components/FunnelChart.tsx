@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { useFunnel, FunnelData } from '../hooks/useKpis'
 
 interface FunnelStage {
   stage: string
@@ -9,36 +10,45 @@ interface FunnelStage {
   color: string
 }
 
-const funnelData: FunnelStage[] = [
-  { stage: 'Visitors', count: 56240, percentage: 100, color: '#8B5CF6' },
-  { stage: 'Signups', count: 12840, percentage: 22.8, color: '#7C3AED' },
-  { stage: 'Activated', count: 6420, percentage: 11.4, color: '#6D28D9' },
-  { stage: 'Trial Users', count: 3210, percentage: 5.7, color: '#5B21B6' },
-  { stage: 'Paid Customers', count: 1824, percentage: 3.2, color: '#4C1D95' },
-]
+const STAGE_COLORS = ['#8B5CF6', '#7C3AED', '#6D28D9', '#5B21B6', '#4C1D95']
 
 const FunnelChart: React.FC = () => {
-  const [animatedStages, setAnimatedStages] = useState<FunnelStage[]>(
-    funnelData.map(stage => ({ ...stage, count: 0 }))
-  )
+  const { data, isLoading } = useFunnel()
+  const [animatedStages, setAnimatedStages] = useState<FunnelStage[]>([])
 
-  React.useEffect(() => {
-    const animate = () => {
-      let step = 0
-      const interval = setInterval(() => {
-        if (step >= 100) {
-          clearInterval(interval)
-          return
-        }
-        step += 2
-        setAnimatedStages(funnelData.map(stage => ({
-          ...stage,
-          count: Math.floor(stage.count * step / 100)
-        })))
-      }, 30)
-    }
-    animate()
-  }, [])
+  useEffect(() => {
+    if (!data) return
+    const stages: FunnelStage[] = [
+      { stage: 'Visitors', count: data.visitors, percentage: 100, color: STAGE_COLORS[0] },
+      { stage: 'Signups', count: data.signups, percentage: data.conversionRates.signup, color: STAGE_COLORS[1] },
+      { stage: 'Activated', count: data.activations, percentage: data.conversionRates.activation, color: STAGE_COLORS[2] },
+      { stage: 'Trial Users', count: data.trials, percentage: data.conversionRates.trial, color: STAGE_COLORS[3] },
+      { stage: 'Paid Customers', count: data.paid, percentage: data.conversionRates.paid, color: STAGE_COLORS[4] },
+    ]
+    setAnimatedStages(stages.map(s => ({ ...s, count: 0 })))
+
+    let step = 0
+    const interval = setInterval(() => {
+      if (step >= 100) {
+        clearInterval(interval)
+        return
+      }
+      step += 2
+      setAnimatedStages(stages.map(s => ({ ...s, count: Math.floor(s.count * step / 100) })))
+    }, 30)
+    return () => clearInterval(interval)
+  }, [data])
+
+  const formatNumber = (num: number) => num.toLocaleString()
+
+  if (isLoading) {
+    return (
+      <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-xl p-6 shadow-xl border border-slate-200 dark:border-slate-700">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-6">Conversion Funnel</h3>
+        <p className="text-sm text-slate-500">Loading…</p>
+      </div>
+    )
+  }
 
   const formatNumber = (num: number) => num.toLocaleString()
 
