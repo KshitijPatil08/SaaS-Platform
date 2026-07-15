@@ -123,7 +123,7 @@ const MRRChart: React.FC = () => {
             dot={{ r: 4, fill: 'rgba(124, 58, 237, 1)', stroke: 'currentColor', strokeWidth: 1, opacity: 0.8 }}
             activeDot={{ r: 6, fill: 'rgba(124, 58, 237, 1)', stroke: 'currentColor', strokeWidth: 2, opacity: 1 }}
             animationDuration={2000}
-            animationEasing="easeInOut"
+            animationEasing="ease-in-out"
           />
 
           <Line
@@ -136,7 +136,7 @@ const MRRChart: React.FC = () => {
             dot={{ r: 4, fill: 'rgba(59, 130, 246, 1)', stroke: 'currentColor', strokeWidth: 1, opacity: 0.8 }}
             activeDot={{ r: 6, fill: 'rgba(59, 130, 246, 1)', stroke: 'currentColor', strokeWidth: 2, opacity: 1 }}
             animationDuration={2000}
-            animationEasing="easeInOut"
+            animationEasing="ease-in-out"
           />
         </LineChart>
       </ResponsiveContainer>
