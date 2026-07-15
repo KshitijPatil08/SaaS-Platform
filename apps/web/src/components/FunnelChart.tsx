@@ -50,8 +50,6 @@ const FunnelChart: React.FC = () => {
     )
   }
 
-  const formatNumber = (num: number) => num.toLocaleString()
-
   return (
     <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-xl p-6 shadow-xl border border-slate-200 dark:border-slate-700">
       <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-6">Conversion Funnel</h3>
@@ -91,7 +89,7 @@ const FunnelChart: React.FC = () => {
       <ResponsiveContainer width="100%" height={280} className="mt-8">
         <BarChart data={animatedStages} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
           <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-          <XAxis type="number" axisLine={false} tickLine={false} tick={{ display: false }} />
+          <XAxis type="number" axisLine={false} tickLine={false} tick={false} />
           <YAxis
             dataKey="stage"
             type="category"
