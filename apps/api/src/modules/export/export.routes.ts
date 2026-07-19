@@ -1,12 +1,13 @@
 import express from 'express'
-import { verifyJwt } from '../middleware/auth'
-import { validateQuery, exportQuerySchema } from '../middleware/validation'
-import { prisma } from '../lib/prisma'
+import { verifyJwt } from '../auth/auth.middleware'
+import { validateQuery } from '../shared/middleware/validation'
+import { prisma } from '../shared/lib/prisma'
+import { exportQuerySchema, CSV_HEADER, toCsvRow } from './export.schema'
 
 const router = express.Router()
 
 // GET /api/export?format=csv&range=last_12_months
-// Returns CSV export of MRR snapshots for the company
+// Returns CSV/JSON export of MRR snapshots for the company
 router.get('/', verifyJwt, validateQuery(exportQuerySchema), async (req, res) => {
   try {
     const companyId = req.companyId
@@ -27,18 +28,10 @@ router.get('/', verifyJwt, validateQuery(exportQuerySchema), async (req, res) =>
       return res.json(snapshots)
     }
 
-    // Default: CSV
-    const header = 'date,mrr_cents,new_mrr_cents,expansion_mrr_cents,contraction_mrr_cents,churned_mrr_cents,customer_count\n'
-    const rows = snapshots
-      .map(
-        (s) =>
-          `${s.date.toISOString().split('T')[0]},${s.mrr_cents},${s.new_mrr_cents},${s.expansion_mrr_cents},${s.contraction_mrr_cents},${s.churned_mrr_cents},${s.customer_count}`
-      )
-      .join('\n')
-
+    const rows = snapshots.map(toCsvRow).join('\n')
     res.setHeader('Content-Type', 'text/csv')
     res.setHeader('Content-Disposition', 'attachment; filename="mrr-export.csv"')
-    return res.send(header + rows)
+    return res.send(CSV_HEADER + '\n' + rows)
   } catch (error) {
     console.error('Export error:', error)
     return res.status(500).json({ error: 'Failed to export data' })
