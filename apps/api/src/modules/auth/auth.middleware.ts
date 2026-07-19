@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
+import { config } from '../shared/lib/config'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-me'
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'default-refresh-secret-change-me'
+const JWT_SECRET = config.jwtSecret
+const JWT_REFRESH_SECRET = config.jwtRefreshSecret
 
 interface JwtPayload {
   companyId: string
@@ -64,7 +65,7 @@ export const tokenRefreshMiddleware = (
 
       res.cookie('access_token', newAccessToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: config.isProduction,
         sameSite: 'strict',
         maxAge: 15 * 60 * 1000,
       })
@@ -72,9 +73,13 @@ export const tokenRefreshMiddleware = (
       req.companyId = decoded.companyId
       return next()
     } catch {
+      // Stale/invalid refresh token: clear it and continue.
+      // We deliberately call next() (not 401) so public routes like
+      // /health and /api/auth/login are not blocked, and protected
+      // routes are still rejected downstream by verifyJwt.
       res.clearCookie('access_token')
       res.clearCookie('refresh_token')
-      return res.status(401).json({ error: 'Session expired' })
+      return next()
     }
   }
 

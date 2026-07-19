@@ -1,7 +1,8 @@
 import Stripe from 'stripe'
+import { config } from '../shared/lib/config'
 
 // Single Stripe SDK instance + helpers, reused across billing routes/webhooks.
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+export const stripe = new Stripe(config.stripeSecretKey, {
   apiVersion: '2023-10-16',
 })
 

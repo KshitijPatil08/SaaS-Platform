@@ -14,6 +14,7 @@
 | Security | `helmet`, `cors`, `express-rate-limit`, `cookie-parser` | CSP, HSTS, CORS, throttling |
 | Testing (planned) | `vitest` / `jest` | Mirrors `modules/` 1:1 |
 | Seed | `prisma/seed.ts` | Demo company + customers + snapshots |
+| Config | `shared/lib/config.ts` | Centralized, validated env config (fail-fast in prod) |
 
 ## 2. Frontend (`apps/web`) — planned
 

@@ -6,8 +6,9 @@ import { billingService } from './billing.service'
 
 const router = express.Router()
 
-// IMPORTANT: this route must use express.raw() in app.ts so req.body is a Buffer
-router.post('/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+// app.ts mounts this router at /webhooks/stripe and applies express.raw() for
+// that path, so req.body is a Buffer available for signature verification.
+router.post('/', async (req, res) => {
   const sig = req.headers['stripe-signature'] as string
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || ''
 

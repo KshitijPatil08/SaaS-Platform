@@ -2,10 +2,11 @@ import jwt from 'jsonwebtoken'
 import bcrypt from 'bcrypt'
 import speakeasy from 'speakeasy'
 import { prisma } from '../shared/lib/prisma'
+import { config } from '../shared/lib/config'
 import type { LoginInput, RegisterInput, MfaEnrollInput, MfaConfirmInput } from './auth.schema'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'change-me'
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'change-me-refresh'
+const JWT_SECRET = config.jwtSecret
+const JWT_REFRESH_SECRET = config.jwtRefreshSecret
 
 export interface AuthTokens {
   accessToken: string
@@ -30,14 +31,19 @@ function issueTokens(companyId: string): AuthTokens {
 
 export const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
+  secure: config.isProduction,
   sameSite: 'strict' as const,
   maxAge: ACCESS_MAX_AGE,
 }
 
+// Precomputed valid bcrypt hash so the dummy comparison never throws.
+// (The previous code used '$2b$10$dummy', an invalid hash that made
+// bcrypt.compare throw — turning "user not found" into a 500.)
+const DUMMY_HASH = bcrypt.hashSync('dummy-consumes-cpu', 10)
+
 // Constant-time-ish failure to avoid user enumeration
 async function consumeCpu() {
-  await bcrypt.compare('dummy-hash-to-consume-cpu', '$2b$10$dummy')
+  await bcrypt.compare('dummy-hash-to-consume-cpu', DUMMY_HASH)
 }
 
 export const authService = {

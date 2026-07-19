@@ -1,6 +1,5 @@
 import express, { Request, Response } from 'express';
 import { tokenRefreshMiddleware } from './auth.middleware';
-import { prisma } from '../shared/lib/prisma';
 import { authService, cookieOptions } from './auth.service';
 import {
   loginSchema,

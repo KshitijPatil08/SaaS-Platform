@@ -57,31 +57,35 @@ export const analyticsService = {
 
   // Health-score distribution + top at-risk accounts
   async getHealth(companyId: string) {
-    const latest = await prisma.healthScore.groupBy({
-      by: ['customer_id'],
+    // Fetch every health score for the company, newest first, in a SINGLE
+    // query. Previously this did a groupBy + one findFirst PER customer
+    // (N+1 queries). We dedupe to the latest score per customer in memory,
+    // which is O(n) instead of O(n) queries and stays bounded by the
+    // company's customer count.
+    const all = await prisma.healthScore.findMany({
       where: { company_id: companyId },
-      _max: { computed_at: true },
+      orderBy: { computed_at: 'desc' },
+      include: { customer: { select: { name: true, email: true } } },
     })
 
-    const latestScores = await Promise.all(
-      latest.map((g) =>
-        prisma.healthScore.findFirst({
-          where: {
-            company_id: companyId,
-            customer_id: g.customer_id,
-            computed_at: g._max.computed_at ?? undefined,
-          },
-          include: { customer: { select: { name: true, email: true } } },
-        })
-      )
-    )
-
-    const scores = latestScores.filter(Boolean) as Array<{
+    const seen = new Set<string>()
+    const scores: Array<{
       customer_id: string
       score: number
       signals: unknown
       customer: { name: string; email: string }
-    }>
+    }> = []
+
+    for (const row of all) {
+      if (seen.has(row.customer_id)) continue
+      seen.add(row.customer_id)
+      scores.push({
+        customer_id: row.customer_id,
+        score: row.score,
+        signals: row.signals,
+        customer: row.customer as { name: string; email: string },
+      })
+    }
 
     const distribution = {
       healthy: scores.filter((s) => s.score >= 70).length,

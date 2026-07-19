@@ -103,3 +103,14 @@ Client → app.ts (helmet, cors, rate-limit, cookieParser)
 - Move files first, update imports, run `tsc --noEmit` before touching runtime.
 - Keep `prisma/` at the root of `apps/api` (intentionally cross-domain).
 - Run a QA regression pass: confirm every endpoint returns identical responses after the move.
+
+## 8. Bugs Fixed (security & scalability)
+| # | Bug | Fix |
+|---|-----|-----|
+| 1 | Stripe webhook mounted at `/webhooks/stripe` but handler was `/stripe` → never matched Stripe's POST | Handler now `POST /`; mounted at `/webhooks/stripe` |
+| 2 | `express.json()` pre-parsed the webhook body into an object, so signature verification had no Buffer | `express.raw()` for `/webhooks/stripe` mounted **before** `express.json()` |
+| 3 | Dummy bcrypt hash `'$2b$10$dummy'` was invalid and threw on "user not found" → 500 instead of 401 | Precomputed valid hash; compare is now safe |
+| 4 | `tokenRefreshMiddleware` returned 401 on stale refresh cookies, blocking `/health` & `/api/auth/login` | On refresh failure it clears cookies and calls `next()`; `verifyJwt` enforces auth downstream |
+| 5 | `getHealth` did a `groupBy` + one `findFirst` **per customer** (N+1) | Single `findMany` + in-memory dedupe to latest-per-customer |
+| 6 | Insecure secret fallbacks (`'change-me'`, `''`) used silently in prod; inconsistent across files | Centralized `shared/lib/config.ts`; **throws at boot in production** if a required secret is missing |
+| 7 | No brute-force protection on login/register beyond the global 100/min limiter | Dedicated `authLimiter` (10/win) on `/api/auth/login` & `/api/auth/register` |

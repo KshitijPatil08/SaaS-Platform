@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit'
 import cookieParser from 'cookie-parser'
 import dotenv from 'dotenv'
 
+import { config } from './modules/shared/lib/config'
 import { verifyJwt, tokenRefreshMiddleware } from './modules/auth/auth.middleware'
 import { validateQuery, exportQuerySchema } from './modules/shared/middleware/validation'
 import kpisRouter from './modules/analytics/kpis.routes'
@@ -43,25 +44,40 @@ app.use(helmet({
   },
 }))
 
-// Rate Limiting
+// Global API rate limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000'),
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
+  windowMs: config.rateLimitWindowMs,
+  max: config.rateLimitMaxRequests,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
 })
 app.use('/api/', limiter)
 
+// Stricter limiter on auth endpoints to blunt credential-stuffing / brute force
+const authLimiter = rateLimit({
+  windowMs: config.rateLimitWindowMs,
+  max: config.loginRateLimitMaxRequests,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts, please try again later.' },
+})
+app.use('/api/auth/login', authLimiter)
+app.use('/api/auth/register', authLimiter)
+
 // CORS Configuration
 app.use(cors({
-  origin: process.env.CLIENT_ORIGIN || 'http://localhost:3000',
+  origin: config.clientOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }))
 
 // Body Parsing
+// Stripe webhooks require the RAW request body (Buffer) for signature
+// verification, so the raw parser must run for that path BEFORE express.json().
+// express.json() skips paths where the body was already consumed.
+app.use('/webhooks/stripe', express.raw({ type: 'application/json' }))
 app.use(express.json({ limit: '1mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser(process.env.COOKIE_SECRET))
