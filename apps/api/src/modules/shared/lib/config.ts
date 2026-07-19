@@ -31,6 +31,7 @@ export const config = {
   stripeWebhookSecret: requireSecret('STRIPE_WEBHOOK_SECRET', ''),
   clientOrigin: process.env.CLIENT_ORIGIN || 'http://localhost:3000',
   cookieSecret: process.env.COOKIE_SECRET || 'dev-cookie-secret',
+  redisUrl: process.env.REDIS_URL || '',
   rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10),
   rateLimitMaxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10),
   loginRateLimitMaxRequests: parseInt(process.env.LOGIN_RATE_LIMIT_MAX || '10', 10),

@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser'
 import dotenv from 'dotenv'
 
 import { config } from './modules/shared/lib/config'
+import { createRateLimitStore } from './modules/shared/lib/rateLimitStore'
 import { verifyJwt, tokenRefreshMiddleware } from './modules/auth/auth.middleware'
 import { validateQuery, exportQuerySchema } from './modules/shared/middleware/validation'
 import kpisRouter from './modules/analytics/kpis.routes'
@@ -44,13 +45,14 @@ app.use(helmet({
   },
 }))
 
-// Global API rate limiting
+// Global API rate limiting — shared across instances via Redis
 const limiter = rateLimit({
   windowMs: config.rateLimitWindowMs,
   max: config.rateLimitMaxRequests,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
+  store: createRateLimitStore('global'),
 })
 app.use('/api/', limiter)
 
@@ -61,6 +63,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many authentication attempts, please try again later.' },
+  store: createRateLimitStore('auth'),
 })
 app.use('/api/auth/login', authLimiter)
 app.use('/api/auth/register', authLimiter)
