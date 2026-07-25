@@ -5,6 +5,7 @@ export interface MrrPoint {
   mrr: number
   newMrr: number
   churnedMrr: number
+  customerCount: number    // included so the frontend can compute customer MoM change
 }
 
 export const billingService = {
@@ -21,6 +22,7 @@ export const billingService = {
       mrr: s.mrr_cents,
       newMrr: s.new_mrr_cents,
       churnedMrr: s.churned_mrr_cents,
+      customerCount: s.customer_count,
     }))
   },
 

@@ -16,10 +16,21 @@ router.get('/', verifyJwt, validateQuery(exportQuerySchema), async (req, res) =>
     }
 
     const format = (req.query.format as string) || 'csv'
+    const range = (req.query.range as string) || 'last_12_months'
+
+    const rangeTakeMap: Record<string, number | undefined> = {
+      last_3_months: 3,
+      last_6_months: 6,
+      last_12_months: 12,
+      all_time: undefined,
+    }
+
+    const take = rangeTakeMap[range] ?? 12
+
     const snapshots = await prisma.mRRSnapshot.findMany({
       where: { company_id: companyId },
       orderBy: { date: 'asc' },
-      take: 12,
+      ...(take ? { take } : {}),
     })
 
     if (format === 'json') {

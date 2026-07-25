@@ -3,7 +3,7 @@ import { z } from 'zod'
 // Query params for GET /api/export
 export const exportQuerySchema = z.object({
   format: z.enum(['csv', 'json']).optional().default('csv'),
-  range: z.string().max(50).optional(),
+  range: z.enum(['last_3_months', 'last_6_months', 'last_12_months', 'all_time']).optional().default('last_12_months'),
 })
 
 export type ExportQuery = z.infer<typeof exportQuerySchema>

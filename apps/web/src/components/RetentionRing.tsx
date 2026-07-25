@@ -2,17 +2,17 @@ import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 
 interface RetentionRingProps {
-  percentage?: number
-  totalCustomers: number   // real customer count — no magic-number fallback
+  percentage: number        // required — no silent 87% fallback; callers must pass a real value
+  totalCustomers: number   // real customer count
   size?: number
 }
 
 const RetentionRing: React.FC<RetentionRingProps> = ({
-  percentage = 87,
+  percentage,
   totalCustomers,
   size = 160
 }) => {
-  const retained = Math.round(((percentage ?? 0) / 100) * totalCustomers)
+  const retained = Math.round((percentage / 100) * totalCustomers)
   const churned = totalCustomers - retained
   const [animatedPercentage, setAnimatedPercentage] = useState(0)
 

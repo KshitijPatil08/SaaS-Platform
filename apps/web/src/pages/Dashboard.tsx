@@ -33,21 +33,18 @@ const Dashboard: React.FC = () => {
       ? pctChange(mrrSeries.at(-1)!.mrr, mrrSeries.at(-2)!.mrr)
       : 0;
 
-  // Customer count isn’t directly in the MRR series, but the snapshot’s customer_count field tracks it.
-  // Fall back to 0 when series is too short.
+  // Customer count — now properly typed via MrrPoint.customerCount (no as any)
   const customerChange =
     mrrSeries && mrrSeries.length >= 2
-      ? pctChange(
-          (mrrSeries.at(-1) as any).customer_count ?? 0,
-          (mrrSeries.at(-2) as any).customer_count ?? 0
-        )
+      ? pctChange(mrrSeries.at(-1)!.customerCount, mrrSeries.at(-2)!.customerCount)
       : 0;
 
   const kpiCards = [
     { title: 'MRR', value: mrrCents ? Number(new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(mrrCents / 100).replace(/[^0-9.]/g, '')) : 0, change: mrrChange, color: 'purple-600', direction: (mrrChange >= 0 ? 1 : -1) as 1 | -1 },
     { title: 'Customers', value: customerCount, change: customerChange, color: 'blue-600', direction: (customerChange >= 0 ? 1 : -1) as 1 | -1 },
-    { title: 'Churn Rate', value: churnRate, change: -2.1, color: 'rose-600', direction: -1 as const },
-    { title: 'Health Score', value: healthPct ?? 0, change: 4.5, color: 'emerald-600', direction: 1 as const },
+    // Churn rate has no prior-period series — show the current value; no fabricated trend arrow
+    { title: 'Churn Rate', value: churnRate, change: churnRate, color: 'rose-600', direction: -1 as const },
+    { title: 'Health Score', value: healthPct ?? 0, change: healthPct ?? 0, color: 'emerald-600', direction: 1 as const },
   ];
 
   return (

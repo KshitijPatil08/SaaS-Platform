@@ -22,6 +22,7 @@ export interface MrrPoint {
   mrr: number
   newMrr: number
   churnedMrr: number
+  customerCount: number   // maps to customer_count from the MRRSnapshot; used for customer MoM trend
 }
 
 export function useMrrSeries() {
