@@ -22,6 +22,20 @@ const MRRChart: React.FC = () => {
     return data.reduce((sum, item) => sum + item.mrr, 0)
   }
 
+  // Real month-over-month % — shown in the stat cards below the chart header.
+  const pctChange = (curr: number, prev: number) =>
+    prev === 0 ? null : Math.round(((curr - prev) / prev) * 1000) / 10
+
+  const mrrMoM = data.length >= 2
+    ? pctChange(data[data.length - 1].mrr, data[data.length - 2].mrr)
+    : null
+  const newMrrMoM = data.length >= 2
+    ? pctChange(data[data.length - 1].newMRR, data[data.length - 2].newMRR)
+    : null
+
+  const formatMoM = (val: number | null) =>
+    val === null ? 'No prior data' : `${val >= 0 ? '+' : ''}${val}% from last month`
+
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const monthData = payload[0].payload as MRRData
@@ -65,12 +79,12 @@ const MRRChart: React.FC = () => {
         <div>
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">Current MRR</h3>
           <p className="text-3xl font-bold text-purple-600">${data.length ? data[data.length - 1].mrr.toLocaleString() : 0}</p>
-          <p className="text-sm text-slate-600 dark:text-slate-400">+4.6% from last month</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400">{formatMoM(mrrMoM)}</p>
         </div>
         <div>
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">New MRR</h3>
           <p className="text-3xl font-bold text-blue-600">${data.length ? data[data.length - 1].newMRR.toLocaleString() : 0}</p>
-          <p className="text-sm text-slate-600 dark:text-slate-400">+2.1% from last month</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400">{formatMoM(newMrrMoM)}</p>
         </div>
       </div>
 

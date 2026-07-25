@@ -6,7 +6,7 @@ import MRRChart from '../components/MRRChart';
 import FunnelChart from '../components/FunnelChart';
 import RetentionRing from '../components/RetentionRing';
 import AccountsTable from '../components/AccountsTable';
-import { useKpis, useHealth } from '../hooks/useKpis';
+import { useKpis, useHealth, useMrrSeries } from '../hooks/useKpis';
 
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
@@ -14,19 +14,40 @@ const formatCurrency = (cents: number) =>
 const Dashboard: React.FC = () => {
   const { data: kpis, isLoading } = useKpis();
   const { data: health } = useHealth();
+  const { data: mrrSeries } = useMrrSeries();
 
   const mrrCents = kpis?.mrr_cents ?? 0;
   const customerCount = kpis?.customer_count ?? 0;
   const churnRate = kpis?.churn_rate ?? 0;
   const healthPct = health
     ? Math.round((health.distribution.healthy / Math.max(1, customerCount)) * 100)
-    : 0;
+    : undefined;
+
+  // Real month-over-month change derived from the MRR series.
+  // Returns 0 when fewer than 2 data points are available.
+  const pctChange = (curr: number, prev: number) =>
+    prev === 0 ? 0 : Math.round(((curr - prev) / prev) * 1000) / 10
+
+  const mrrChange =
+    mrrSeries && mrrSeries.length >= 2
+      ? pctChange(mrrSeries.at(-1)!.mrr, mrrSeries.at(-2)!.mrr)
+      : 0;
+
+  // Customer count isn’t directly in the MRR series, but the snapshot’s customer_count field tracks it.
+  // Fall back to 0 when series is too short.
+  const customerChange =
+    mrrSeries && mrrSeries.length >= 2
+      ? pctChange(
+          (mrrSeries.at(-1) as any).customer_count ?? 0,
+          (mrrSeries.at(-2) as any).customer_count ?? 0
+        )
+      : 0;
 
   const kpiCards = [
-    { title: 'MRR', value: mrrCents ? Number(formatCurrency(mrrCents).replace(/[^0-9.]/g, '')) : 0, change: 12.8, color: 'purple-600', direction: 1 as const },
-    { title: 'Customers', value: customerCount, change: 8.2, color: 'blue-600', direction: 1 as const },
+    { title: 'MRR', value: mrrCents ? Number(new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(mrrCents / 100).replace(/[^0-9.]/g, '')) : 0, change: mrrChange, color: 'purple-600', direction: (mrrChange >= 0 ? 1 : -1) as 1 | -1 },
+    { title: 'Customers', value: customerCount, change: customerChange, color: 'blue-600', direction: (customerChange >= 0 ? 1 : -1) as 1 | -1 },
     { title: 'Churn Rate', value: churnRate, change: -2.1, color: 'rose-600', direction: -1 as const },
-    { title: 'Health Score', value: healthPct, change: 4.5, color: 'emerald-600', direction: 1 as const },
+    { title: 'Health Score', value: healthPct ?? 0, change: 4.5, color: 'emerald-600', direction: 1 as const },
   ];
 
   return (
@@ -67,7 +88,13 @@ const Dashboard: React.FC = () => {
             <FunnelChart />
           </motion.div>
           <motion.div key="retention" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
-            <RetentionRing percentage={healthPct || 87} />
+            {healthPct === undefined || customerCount === 0 ? (
+              <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-xl p-6 shadow-xl border border-slate-200 dark:border-slate-700 h-full flex flex-col items-center justify-center">
+                <p className="text-sm text-slate-500 dark:text-slate-400">No health data yet</p>
+              </div>
+            ) : (
+              <RetentionRing percentage={healthPct} totalCustomers={customerCount} />
+            )}
           </motion.div>
 
           <motion.div key="accounts" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="col-span-1 sm:col-span-2 lg:col-span-3">

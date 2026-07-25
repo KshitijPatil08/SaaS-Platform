@@ -4,13 +4,22 @@ import { prisma } from '../shared/lib/prisma'
 export const analyticsService = {
   // Top-level KPI snapshot: MRR, customer count, churn rate
   async getKpis(companyId: string) {
+    // Rolling 30-day window for churn — avoids inflating the rate with all-time
+    // historical churn events. Ideally the denominator would also be customer
+    // count as-of periodStart (pulled from the nearest MRRSnapshot), but
+    // current customer count is a reasonable, explainable approximation.
+    const periodStart = new Date()
+    periodStart.setDate(periodStart.getDate() - 30)
+
     const [customerCount, mrrSnapshot, churnCount] = await Promise.all([
       prisma.customer.count({ where: { company_id: companyId } }),
       prisma.mRRSnapshot.findFirst({
         where: { company_id: companyId },
         orderBy: { date: 'desc' },
       }),
-      prisma.churnEvent.count({ where: { company_id: companyId } }),
+      prisma.churnEvent.count({
+        where: { company_id: companyId, churned_at: { gte: periodStart } },
+      }),
     ])
 
     const churnRate = customerCount > 0 ? (churnCount / customerCount) * 100 : 0

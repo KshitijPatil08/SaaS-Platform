@@ -1,8 +1,19 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, AlertCircle, Clock } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAccounts, Account } from '../hooks/useKpis'
+
+// Delays propagating a value until `delayMs` have passed without a change.
+// Prevents firing a search API request on every single keystroke.
+function useDebouncedValue<T>(value: T, delayMs = 300): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delayMs)
+    return () => clearTimeout(t)
+  }, [value, delayMs])
+  return debounced
+}
 
 type Plan = 'starter' | 'pro' | 'enterprise'
 type Status = 'active' | 'past_due' | 'canceled' | 'trialing'
@@ -41,8 +52,9 @@ const AccountsTable: React.FC = () => {
   const [filter, setFilter] = useState<string>('')
   const [page, setPage] = useState(1)
   const rowsPerPage = 5
+  const debouncedFilter = useDebouncedValue(filter, 300)
 
-  const { data, isLoading } = useAccounts(page, rowsPerPage, undefined, filter || undefined)
+  const { data, isLoading } = useAccounts(page, rowsPerPage, undefined, debouncedFilter || undefined)
   const accounts: Account[] = data?.data ?? []
   const totalPages = data?.pagination.totalPages ?? 1
 

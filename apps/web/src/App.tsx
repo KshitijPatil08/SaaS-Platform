@@ -13,7 +13,7 @@ function App() {
           <SideNav />
           <main className="flex-1 ml-64 bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900 min-h-screen">
             <Routes>
-              <Route path="" element={<Dashboard />} />
+              <Route path="/" element={<Dashboard />} />
             </Routes>
           </main>
         </div>

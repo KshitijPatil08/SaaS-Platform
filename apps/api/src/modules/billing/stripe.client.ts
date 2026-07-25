@@ -21,5 +21,6 @@ export function extractCustomerId(
   customer: string | Stripe.Customer | Stripe.DeletedCustomer | null
 ): string | null {
   if (!customer) return null
+  if (typeof customer !== 'string' && 'deleted' in customer && customer.deleted) return null
   return typeof customer === 'string' ? customer : customer.id
 }

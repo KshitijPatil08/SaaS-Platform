@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -85,7 +85,7 @@ model Event {
   customer_id String?
   customer   Customer? @relation(fields: [customer_id], references: [id])
   name       String
-  properties Json     @default("{}")
+  properties String   @default("{}")
   occurred_at DateTime @default(now())
 
   @@index([company_id, occurred_at(sort: Desc)])
@@ -96,7 +96,7 @@ model MRRSnapshot {
   id                String   @id @default(uuid())
   company_id        String
   company           Company  @relation(fields: [company_id], references: [id])
-  date              DateTime @unique
+  date              DateTime
   mrr_cents         Int
   new_mrr_cents     Int      @default(0)
   expansion_mrr_cents Int    @default(0)
@@ -104,6 +104,7 @@ model MRRSnapshot {
   churned_mrr_cents Int      @default(0)
   customer_count    Int      @default(0)
 
+  @@unique([company_id, date])
   @@index([company_id, date])
 }
 
@@ -114,7 +115,7 @@ model HealthScore {
   customer_id String
   customer   Customer @relation(fields: [customer_id], references: [id])
   score      Int
-  signals    Json
+  signals    String   @default("{}")
   computed_at DateTime @default(now())
 
   @@unique([company_id, customer_id, computed_at])

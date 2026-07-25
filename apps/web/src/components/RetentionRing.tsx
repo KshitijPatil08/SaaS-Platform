@@ -3,13 +3,17 @@ import { motion } from 'framer-motion'
 
 interface RetentionRingProps {
   percentage?: number
+  totalCustomers: number   // real customer count — no magic-number fallback
   size?: number
 }
 
 const RetentionRing: React.FC<RetentionRingProps> = ({
   percentage = 87,
+  totalCustomers,
   size = 160
 }) => {
+  const retained = Math.round(((percentage ?? 0) / 100) * totalCustomers)
+  const churned = totalCustomers - retained
   const [animatedPercentage, setAnimatedPercentage] = useState(0)
 
   useEffect(() => {
@@ -90,11 +94,11 @@ const RetentionRing: React.FC<RetentionRingProps> = ({
 
       <div className="mt-6 grid grid-cols-2 gap-4 text-center w-full">
         <div className="p-3 bg-slate-100 dark:bg-slate-700/50 rounded-lg">
-          <p className="text-2xl font-bold text-emerald-600">{Math.round(percentage * 18.24)}</p>
+          <p className="text-2xl font-bold text-emerald-600">{retained}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400">Retained</p>
         </div>
         <div className="p-3 bg-slate-100 dark:bg-slate-700/50 rounded-lg">
-          <p className="text-2xl font-bold text-rose-600">{Math.round((100 - percentage) * 18.24)}</p>
+          <p className="text-2xl font-bold text-rose-600">{churned}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400">Churned</p>
         </div>
       </div>
