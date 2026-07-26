@@ -9,9 +9,26 @@
 
 const isProduction = process.env.NODE_ENV === 'production'
 
+const WEAK_SECRETS = new Set([
+  'change-me',
+  'change-me-refresh',
+  'dev-cookie-secret',
+  'secret',
+  'password',
+  '123456',
+  'default',
+])
+
 function requireSecret(name: string, fallback: string): string {
   const value = process.env[name]
-  if (value) return value
+  if (value) {
+    if (isProduction && WEAK_SECRETS.has(value.toLowerCase())) {
+      throw new Error(
+        `Environment variable ${name} is set to a weak/default secret ("${value}") in production. Set a strong secret before deploying.`
+      )
+    }
+    return value
+  }
   if (isProduction) {
     throw new Error(
       `Missing required environment variable ${name} in production. Refusing to start with an insecure fallback.`

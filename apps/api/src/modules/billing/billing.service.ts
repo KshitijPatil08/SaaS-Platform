@@ -73,4 +73,48 @@ export const billingService = {
       data: { status: 'active' },
     })
   },
+
+  // Safe daily MRRSnapshot recording with normalized UTC midnight date constraint matching
+  async upsertSnapshot(
+    companyId: string,
+    snapshot: {
+      date?: Date
+      mrrCents: number
+      newMrrCents?: number
+      expansionMrrCents?: number
+      contractionMrrCents?: number
+      churnedMrrCents?: number
+      customerCount?: number
+    }
+  ) {
+    const date = snapshot.date ? new Date(snapshot.date) : new Date()
+    date.setUTCHours(0, 0, 0, 0)
+
+    return prisma.mRRSnapshot.upsert({
+      where: {
+        company_id_date: {
+          company_id: companyId,
+          date,
+        },
+      },
+      update: {
+        mrr_cents: snapshot.mrrCents,
+        new_mrr_cents: snapshot.newMrrCents ?? 0,
+        expansion_mrr_cents: snapshot.expansionMrrCents ?? 0,
+        contraction_mrr_cents: snapshot.contractionMrrCents ?? 0,
+        churned_mrr_cents: snapshot.churnedMrrCents ?? 0,
+        customer_count: snapshot.customerCount ?? 0,
+      },
+      create: {
+        company_id: companyId,
+        date,
+        mrr_cents: snapshot.mrrCents,
+        new_mrr_cents: snapshot.newMrrCents ?? 0,
+        expansion_mrr_cents: snapshot.expansionMrrCents ?? 0,
+        contraction_mrr_cents: snapshot.contractionMrrCents ?? 0,
+        churned_mrr_cents: snapshot.churnedMrrCents ?? 0,
+        customer_count: snapshot.customerCount ?? 0,
+      },
+    })
+  },
 }

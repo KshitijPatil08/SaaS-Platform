@@ -1,6 +1,6 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard } from 'lucide-react'
+import { LayoutDashboard, Users, Filter, Activity, Settings as SettingsIcon } from 'lucide-react'
 
 interface NavItem {
   label: string
@@ -9,11 +9,12 @@ interface NavItem {
   badge?: number
 }
 
-// Only list routes that are actually registered in App.tsx.
-// Dead links (Funnel, Health, Accounts, Churn) were removed until
-// their corresponding page components and routes are implemented.
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', path: '/', icon: <LayoutDashboard className="h-5 w-5" /> },
+  { label: 'Accounts', path: '/accounts', icon: <Users className="h-5 w-5" /> },
+  { label: 'Funnel', path: '/funnel', icon: <Filter className="h-5 w-5" /> },
+  { label: 'Health', path: '/health', icon: <Activity className="h-5 w-5" /> },
+  { label: 'Settings', path: '/settings', icon: <SettingsIcon className="h-5 w-5" /> },
 ]
 
 const SideNav: React.FC = () => {

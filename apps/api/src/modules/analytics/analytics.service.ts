@@ -2,17 +2,20 @@ import { prisma } from '../shared/lib/prisma'
 
 // Shared aggregation helpers for the KPIs, funnel, and health endpoints.
 export const analyticsService = {
-  // Top-level KPI snapshot: MRR, customer count, churn rate
+  // Top-level KPI snapshot: MRR, active customer count, 30-day churn rate
   async getKpis(companyId: string) {
     // Rolling 30-day window for churn — avoids inflating the rate with all-time
-    // historical churn events. Ideally the denominator would also be customer
-    // count as-of periodStart (pulled from the nearest MRRSnapshot), but
-    // current customer count is a reasonable, explainable approximation.
+    // historical churn events.
     const periodStart = new Date()
     periodStart.setDate(periodStart.getDate() - 30)
 
-    const [customerCount, mrrSnapshot, churnCount] = await Promise.all([
-      prisma.customer.count({ where: { company_id: companyId } }),
+    const [activeCustomerCount, mrrSnapshot, churnCount] = await Promise.all([
+      prisma.customer.count({
+        where: {
+          company_id: companyId,
+          status: { in: ['active', 'trialing', 'past_due'] },
+        },
+      }),
       prisma.mRRSnapshot.findFirst({
         where: { company_id: companyId },
         orderBy: { date: 'desc' },
@@ -22,11 +25,16 @@ export const analyticsService = {
       }),
     ])
 
-    const churnRate = customerCount > 0 ? (churnCount / customerCount) * 100 : 0
+    // Denominator for 30-day churn rate is the customer base at start of period (active + churned during period)
+    const startingCustomerBase = activeCustomerCount + churnCount
+    const churnRate =
+      startingCustomerBase > 0
+        ? Math.round((churnCount / startingCustomerBase) * 1000) / 10
+        : 0
 
     return {
       mrr_cents: mrrSnapshot?.mrr_cents ?? 0,
-      customer_count: customerCount,
+      customer_count: activeCustomerCount,
       churn_rate: churnRate,
     }
   },

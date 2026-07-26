@@ -1,6 +1,5 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import SideNav from '../components/SideNav';
 import KPICard from '../components/KPICard';
 import MRRChart from '../components/MRRChart';
 import FunnelChart from '../components/FunnelChart';
@@ -48,10 +47,8 @@ const Dashboard: React.FC = () => {
   ];
 
   return (
-    <>
-      <SideNav />
-      <main className="flex-1 min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900 p-6">
-        <header className="flex items-center justify-between mb-8">
+    <div className="p-6">
+      <header className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Pulse Analytics</h1>
           <div className="flex gap-4">
             <button className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2">
@@ -98,8 +95,7 @@ const Dashboard: React.FC = () => {
             <AccountsTable />
           </motion.div>
         </div>
-      </main>
-    </>
+      </div>
   );
 };
 

@@ -111,6 +111,66 @@ export const authService = {
     return { success: true, mfa_enabled: true }
   },
 
+  async getProfile(companyId: string) {
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      include: {
+        admins: {
+          select: {
+            id: true,
+            email: true,
+            mfa_enabled: true,
+            created_at: true,
+          },
+        },
+      },
+    })
+    if (!company) throw new Error('Company not found')
+    const admin = company.admins[0]
+    return {
+      companyId: company.id,
+      companyName: company.name,
+      stripeId: company.stripe_id,
+      admin: admin ? { email: admin.email, mfaEnabled: admin.mfa_enabled } : null,
+      webhookUrl: `${config.clientOrigin.replace(':3000', ':5000')}/webhooks/stripe?company_id=${company.id}`,
+    }
+  },
+
+  async updateProfile(
+    companyId: string,
+    data: { companyName?: string; email?: string; currentPassword?: string; newPassword?: string }
+  ) {
+    const admin = await prisma.adminUser.findFirst({ where: { company_id: companyId } })
+    if (!admin) throw new Error('Admin user not found')
+
+    if (data.newPassword) {
+      if (!data.currentPassword) throw new Error('Current password is required to change password')
+      const valid = await bcrypt.compare(data.currentPassword, admin.password_hash)
+      if (!valid) throw new Error('Current password is incorrect')
+      const password_hash = await bcrypt.hash(data.newPassword, 12)
+      await prisma.adminUser.update({
+        where: { id: admin.id },
+        data: { password_hash },
+      })
+    }
+
+    if (data.email && data.email !== admin.email) {
+      await prisma.adminUser.update({
+        where: { id: admin.id },
+        data: { email: data.email },
+      })
+    }
+
+    if (data.companyName) {
+      await prisma.company.update({
+        where: { id: companyId },
+        data: { name: data.companyName },
+      })
+    }
+
+    return this.getProfile(companyId)
+  },
+
   async register(input: RegisterInput) {
     const existing = await prisma.adminUser.findFirst({ where: { email: input.email } })
     if (existing) {

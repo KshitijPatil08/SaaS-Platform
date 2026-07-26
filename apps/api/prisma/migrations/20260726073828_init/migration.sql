@@ -60,7 +60,7 @@ CREATE TABLE "Event" (
     "company_id" TEXT NOT NULL,
     "customer_id" TEXT,
     "name" TEXT NOT NULL,
-    "properties" JSONB NOT NULL DEFAULT '{}',
+    "properties" TEXT NOT NULL DEFAULT '{}',
     "occurred_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Event_pkey" PRIMARY KEY ("id")
@@ -87,7 +87,7 @@ CREATE TABLE "HealthScore" (
     "company_id" TEXT NOT NULL,
     "customer_id" TEXT NOT NULL,
     "score" INTEGER NOT NULL,
-    "signals" JSONB NOT NULL,
+    "signals" TEXT NOT NULL DEFAULT '{}',
     "computed_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "HealthScore_pkey" PRIMARY KEY ("id")
@@ -139,10 +139,10 @@ CREATE INDEX "Event_company_id_occurred_at_idx" ON "Event"("company_id", "occurr
 CREATE INDEX "Event_customer_id_idx" ON "Event"("customer_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "MRRSnapshot_date_key" ON "MRRSnapshot"("date");
+CREATE INDEX "MRRSnapshot_company_id_date_idx" ON "MRRSnapshot"("company_id", "date");
 
 -- CreateIndex
-CREATE INDEX "MRRSnapshot_company_id_date_idx" ON "MRRSnapshot"("company_id", "date");
+CREATE UNIQUE INDEX "MRRSnapshot_company_id_date_key" ON "MRRSnapshot"("company_id", "date");
 
 -- CreateIndex
 CREATE INDEX "HealthScore_company_id_idx" ON "HealthScore"("company_id");
@@ -188,4 +188,3 @@ ALTER TABLE "ChurnEvent" ADD CONSTRAINT "ChurnEvent_company_id_fkey" FOREIGN KEY
 
 -- AddForeignKey
 ALTER TABLE "ChurnEvent" ADD CONSTRAINT "ChurnEvent_customer_id_fkey" FOREIGN KEY ("customer_id") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-

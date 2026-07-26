@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { tokenRefreshMiddleware } from './auth.middleware';
+import { tokenRefreshMiddleware, verifyJwt } from './auth.middleware';
 import { authService, cookieOptions } from './auth.service';
 import {
   loginSchema,
@@ -82,6 +82,26 @@ router.post('/register', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/auth/profile (protected)
+router.get('/profile', verifyJwt, async (req: Request, res: Response) => {
+  try {
+    const profile = await authService.getProfile(req.companyId!)
+    return res.json(profile)
+  } catch (e) {
+    return res.status(404).json({ error: (e as Error).message })
+  }
+})
+
+// PUT /api/auth/profile (protected)
+router.put('/profile', verifyJwt, async (req: Request, res: Response) => {
+  try {
+    const updated = await authService.updateProfile(req.companyId!, req.body)
+    return res.json(updated)
+  } catch (e) {
+    return res.status(400).json({ error: (e as Error).message })
+  }
+})
+
 // Re-export so app.ts can mount tokenRefreshMiddleware at the app level
-export { tokenRefreshMiddleware };
-export default router;
+export { tokenRefreshMiddleware }
+export default router

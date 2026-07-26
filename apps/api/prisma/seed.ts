@@ -32,13 +32,26 @@ async function main() {
   for (let i = 11; i >= 0; i--) {
     const date = new Date(today)
     date.setMonth(date.getMonth() - i)
-    await prisma.mRRSnapshot.create({
-      data: {
+    date.setUTCHours(0, 0, 0, 0)
+
+    await prisma.mRRSnapshot.upsert({
+      where: {
+        company_id_date: {
+          company_id: company.id,
+          date,
+        },
+      },
+      update: {
+        mrr_cents: 40000 + (11 - i) * 3000,
+        new_mrr_cents: 3000,
+        customer_count: 16,
+      },
+      create: {
         company_id: company.id,
         date,
         mrr_cents: 40000 + (11 - i) * 3000,
         new_mrr_cents: 3000,
-        customer_count: 20,
+        customer_count: 16,
       },
     })
   }
