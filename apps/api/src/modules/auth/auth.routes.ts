@@ -37,7 +37,10 @@ router.post('/login', async (req: Request, res: Response) => {
         details: { mfaRequired: result.mfaRequired || false },
       })
     }
-    return res.status(401).json({ error: 'Invalid credentials', mfaRequired: result.mfaRequired });
+    if (result.mfaRequired) {
+      return res.status(200).json({ success: false, mfaRequired: true, error: 'Enter your 6-digit MFA code' });
+    }
+    return res.status(401).json({ error: 'Invalid credentials' });
   }
 
   setAuthCookies(res, result.tokens!);
