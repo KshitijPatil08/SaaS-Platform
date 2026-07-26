@@ -89,10 +89,25 @@ const Settings: React.FC = () => {
       setEmail(res.data.admin?.email || '')
       setStripeId(res.data.stripeId || '')
     } catch (err: any) {
+      if (err?.response?.status === 401 || err?.response?.status === 403) {
+        navigate('/login')
+        return
+      }
       const errorMsg = err?.response?.data?.error || 'Could not connect to auth service'
       setLoadError(errorMsg)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleRetryOrDemo = async () => {
+    try {
+      setLoading(true)
+      await api.post('/api/auth/demo')
+      await fetchProfile()
+      await fetchAuditData()
+    } catch {
+      navigate('/login')
     }
   }
 
@@ -261,10 +276,10 @@ const Settings: React.FC = () => {
           </div>
           <div className="flex items-center justify-center gap-3 pt-2">
             <button
-              onClick={fetchProfile}
+              onClick={handleRetryOrDemo}
               className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
             >
-              <RefreshCw className="h-3.5 w-3.5" /> Retry
+              <RefreshCw className="h-3.5 w-3.5" /> Retry Session
             </button>
             <button
               onClick={() => navigate('/login')}

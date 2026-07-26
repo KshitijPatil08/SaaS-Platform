@@ -13,8 +13,8 @@ export const api = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or missing — client should redirect to login
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      // Token expired, invalid, or missing — client should redirect to login
       window.dispatchEvent(new CustomEvent('auth:unauthorized'))
     }
     return Promise.reject(error)
