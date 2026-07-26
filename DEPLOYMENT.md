@@ -102,3 +102,44 @@ helm upgrade pulse-dashboard ./charts/pulse-dashboard
 
 After updating, run `npx prisma migrate deploy` if there are new schema migrations
 (e.g. the `MRRSnapshot` composite unique constraint added in the latest release).
+
+---
+
+## Postgres Backup & Retention Policy (Client-Owned Data)
+
+Because Pulse is designed for **self-hosted and hybrid data ownership**, you maintain complete custody of your PostgreSQL database instance. Use the following operational guidelines for backups:
+
+### 1. Automated Nightly Backup Script (`backup.sh`)
+Add a daily cron job on your PostgreSQL host or container runner:
+
+```bash
+#!/usr/bin/env bash
+set -eo pipefail
+
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/var/backups/pulse"
+DB_NAME="pulse"
+S3_BUCKET="s3://your-company-pulse-backups"
+
+mkdir -p "$BACKUP_DIR"
+
+# Generate compressed custom-format pg_dump
+pg_dump -F c -b -v -h localhost -U pulse_user "$DB_NAME" > "$BACKUP_DIR/pulse_backup_$TIMESTAMP.dump"
+
+# Upload to encrypted S3 bucket (or cloud storage)
+aws s3 cp "$BACKUP_DIR/pulse_backup_$TIMESTAMP.dump" "$S3_BUCKET/" --sse AES256
+
+# Prune local backups older than 7 days
+find "$BACKUP_DIR" -type f -name "*.dump" -mtime +7 -delete
+```
+
+### 2. Recovery Objectives (SLA Targets)
+* **RPO (Recovery Point Objective):** < 15 minutes (with WAL archiving / AWS RDS Point-in-Time Recovery enabled).
+* **RTO (Recovery Time Objective):** < 1 hour to restore database and verify schema migrations.
+
+### 3. Restoring from a Backup
+```bash
+pg_restore --clean --if-exists -h localhost -U pulse_user -d pulse /var/backups/pulse/pulse_backup_20260726.dump
+npx prisma migrate deploy
+```
+

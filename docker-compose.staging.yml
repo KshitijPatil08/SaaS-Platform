@@ -1,0 +1,57 @@
+version: '3.9'
+
+# Staging environment — mirrors production configuration but with:
+#   - A separate PostgreSQL instance (pulse_staging DB)
+#   - Stripe test-mode keys only
+#   - NODE_ENV=staging so secrets still fail-fast but labels are distinguishable
+#   - Different host ports to coexist on the same machine if needed
+#
+# Usage:
+#   cp apps/api/.env.staging apps/api/.env
+#   docker compose -f docker-compose.staging.yml up -d
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pulse_staging
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-staging}
+      POSTGRES_DB: pulse_staging
+    volumes:
+      - staging_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pulse_staging"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+    ports:
+      - "5001:5000"          # ← different port from production (5000)
+    env_file:
+      - ./apps/api/.env.staging
+    environment:
+      DATABASE_URL: postgresql://pulse_staging:${POSTGRES_PASSWORD:-change-me-staging}@db:5432/pulse_staging
+      NODE_ENV: staging
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=false"   # staging should NOT be publicly routed by default
+
+  web:
+    build:
+      context: ./apps/web
+    ports:
+      - "3001:80"            # ← different port from production (3000/80)
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  staging_db_data:
+    name: pulse_staging_db

@@ -52,4 +52,13 @@ export const config = {
   rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10),
   rateLimitMaxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10),
   loginRateLimitMaxRequests: parseInt(process.env.LOGIN_RATE_LIMIT_MAX || '10', 10),
+
+  // Vendor billing — Pulse's own Stripe subscription
+  stripeVendorWebhookSecret: requireSecret('STRIPE_VENDOR_WEBHOOK_SECRET', ''),
+  stripePriceStarter:    process.env.STRIPE_PRICE_STARTER    || '',
+  stripePricePro:        process.env.STRIPE_PRICE_PRO        || '',
+  stripePriceEnterprise: process.env.STRIPE_PRICE_ENTERPRISE || '',
+  stripeVendorSuccessUrl: process.env.STRIPE_VENDOR_SUCCESS_URL || 'http://localhost:3000/billing?success=true',
+  stripeVendorCancelUrl:  process.env.STRIPE_VENDOR_CANCEL_URL  || 'http://localhost:3000/billing?canceled=true',
 }
+

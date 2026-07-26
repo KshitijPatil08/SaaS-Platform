@@ -16,6 +16,12 @@ model Company {
   stripe_id   String?  @unique
   created_at  DateTime @default(now())
 
+  // Vendor billing — Pulse's own subscription for this company
+  plan_tier                  String   @default("free")  // 'free' | 'starter' | 'pro' | 'enterprise'
+  vendor_stripe_customer_id  String?  @unique           // Pulse's Stripe customer for this company
+  vendor_subscription_id     String?  @unique           // active Stripe subscription ID
+  plan_expires_at            DateTime?                  // null = active / no expiry
+
   customers   Customer[]
   events      Event[]
   mrr_snapshots MRRSnapshot[]
@@ -24,6 +30,7 @@ model Company {
   admins      AdminUser[]
   audit_logs  AuditLog[]
 }
+
 
 model AdminUser {
   id              String   @id @default(uuid())

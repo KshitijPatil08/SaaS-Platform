@@ -1,115 +1,475 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { api } from '../lib/api'
-import { Check, Zap, Shield, Sparkles } from 'lucide-react'
+import {
+  Sparkles, Check, Zap, Shield, Crown, ExternalLink,
+  TrendingUp, Users, Calendar, Download, AlertTriangle,
+  ChevronRight, Loader2, RefreshCw,
+} from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 
-const TIERS = [
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface BillingStatus {
+  plan: 'free' | 'starter' | 'pro' | 'enterprise'
+  displayName: string
+  customerCount: number
+  customerCap: number | null
+  retentionDays: number | null
+  exports: boolean
+  teamAdminCap: number
+  monthlyUsdCents: number
+  usagePct: number
+  expiresAt: string | null
+  hasActiveSubscription: boolean
+}
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const TIER_META = {
+  free: {
+    icon: <Zap className="h-5 w-5" />,
+    gradient: 'from-slate-400 to-slate-500',
+    ring: 'ring-slate-300 dark:ring-slate-600',
+    badge: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
+  },
+  starter: {
+    icon: <TrendingUp className="h-5 w-5" />,
+    gradient: 'from-blue-500 to-cyan-500',
+    ring: 'ring-blue-400',
+    badge: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300',
+  },
+  pro: {
+    icon: <Sparkles className="h-5 w-5" />,
+    gradient: 'from-purple-500 to-indigo-600',
+    ring: 'ring-purple-500',
+    badge: 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300',
+  },
+  enterprise: {
+    icon: <Crown className="h-5 w-5" />,
+    gradient: 'from-amber-400 to-orange-500',
+    ring: 'ring-amber-400',
+    badge: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+  },
+}
+
+const PLANS = [
   {
+    key: 'starter' as const,
     name: 'Starter',
     price: '$49',
     period: '/month',
-    description: 'Essential metrics tracking for early stage SaaS startups.',
-    features: ['Up to 500 Active Customers', 'MRR & Churn Tracking', 'Basic Conversion Funnel', 'Standard Webhook Integration'],
-    buttonText: 'Subscribe Starter',
+    tagline: 'Essential metrics for early-stage SaaS startups',
+    features: [
+      'Up to 500 active customers',
+      'MRR & Churn tracking',
+      '90-day data retention',
+      'Basic conversion funnel',
+      'CSV data exports',
+      'Up to 3 admin users',
+    ],
     popular: false,
   },
   {
+    key: 'pro' as const,
     name: 'Pro',
     price: '$149',
     period: '/month',
-    description: 'Advanced analytics, health scoring, and cohort retention for growing SaaS teams.',
-    features: ['Up to 5,000 Active Customers', 'Real-time Account Health Scoring', 'Custom Funnel Tracking', 'CSV & PDF Data Exports', 'Priority Email Support'],
-    buttonText: 'Subscribe Pro',
+    tagline: 'Advanced analytics for growing SaaS teams',
+    features: [
+      'Up to 5,000 active customers',
+      'Real-time account health scoring',
+      'Custom funnel tracking',
+      '365-day data retention',
+      'CSV & PDF exports',
+      'Up to 10 admin users',
+      'Priority email support',
+    ],
     popular: true,
   },
   {
+    key: 'enterprise' as const,
     name: 'Enterprise',
     price: '$499',
     period: '/month',
-    description: 'Unlimited volume, dedicated instance option, and custom data pipelines.',
-    features: ['Unlimited Customers', 'Dedicated Self-Hosted Support', 'Custom Event Pipelines', '24/7 SLA & Dedicated Manager', 'Custom SSO & SAML'],
-    buttonText: 'Subscribe Enterprise',
+    tagline: 'Unlimited volume & dedicated support',
+    features: [
+      'Unlimited active customers',
+      'Unlimited data retention',
+      'All export formats',
+      'Unlimited admin users',
+      'Dedicated self-hosted support',
+      'Custom SSO & SAML',
+      '24/7 SLA & dedicated manager',
+    ],
     popular: false,
   },
 ]
 
-const BillingPage: React.FC = () => {
-  const [loadingTier, setLoadingTier] = useState<string | null>(null)
+// ─── Usage Meter Bar ─────────────────────────────────────────────────────────
 
-  const handleSubscribe = async (tierName: string) => {
-    setLoadingTier(tierName)
+const UsageMeter: React.FC<{ current: number; cap: number | null; pct: number }> = ({
+  current, cap, pct,
+}) => {
+  const color =
+    pct >= 90 ? 'bg-rose-500' :
+    pct >= 70 ? 'bg-amber-400' :
+    'bg-emerald-500'
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-semibold text-slate-700 dark:text-slate-200">
+          {current.toLocaleString()} active customers
+        </span>
+        <span className="text-slate-400">
+          {cap ? `of ${cap.toLocaleString()} included` : 'Unlimited'}
+        </span>
+      </div>
+      <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+        <motion.div
+          className={`h-full rounded-full ${color}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${cap ? pct : 0}%` }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+        />
+      </div>
+      {pct >= 90 && cap && (
+        <p className="text-[11px] text-rose-500 dark:text-rose-400 flex items-center gap-1 font-medium">
+          <AlertTriangle className="h-3 w-3" />
+          Approaching your plan limit — consider upgrading
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+const BillingPage: React.FC = () => {
+  const [status, setStatus] = useState<BillingStatus | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null)
+  const [portalLoading, setPortalLoading] = useState(false)
+  const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Detect Stripe redirect result from URL params
+  const params = new URLSearchParams(window.location.search)
+  const stripeSuccess = params.get('success') === 'true'
+  const stripeCanceled = params.get('canceled') === 'true'
+
+  const fetchStatus = useCallback(async () => {
+    setLoading(true)
     try {
-      // In production, this calls backend endpoint to generate a Stripe Checkout session URL
-      const res = await api.post('/api/billing/checkout', { plan: tierName.toLowerCase() })
+      const res = await api.get('/api/vendor-billing/status')
+      setStatus(res.data)
+    } catch {
+      setStatus(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchStatus()
+    // Poll every 10s when on success landing so plan upgrade appears promptly
+    if (stripeSuccess) {
+      const t = setInterval(fetchStatus, 10000)
+      return () => clearInterval(t)
+    }
+  }, [fetchStatus, stripeSuccess])
+
+  const handleSubscribe = async (plan: string) => {
+    setCheckoutLoading(plan)
+    try {
+      const res = await api.post('/api/vendor-billing/checkout', { plan })
       if (res.data?.url) {
         window.location.href = res.data.url
       }
-    } catch {
-      alert(`Stripe Checkout session initialized for ${tierName} plan!`)
+    } catch (err: any) {
+      setToastMsg({
+        type: 'error',
+        text: err?.response?.data?.error || 'Could not start checkout. Ensure Stripe keys are configured.',
+      })
     } finally {
-      setLoadingTier(null)
+      setCheckoutLoading(null)
     }
   }
 
+  const handlePortal = async () => {
+    setPortalLoading(true)
+    try {
+      const res = await api.post('/api/vendor-billing/portal')
+      if (res.data?.url) window.open(res.data.url, '_blank')
+    } catch (err: any) {
+      setToastMsg({
+        type: 'error',
+        text: err?.response?.data?.error || 'Could not open billing portal.',
+      })
+    } finally {
+      setPortalLoading(false)
+    }
+  }
+
+  const currentPlan = status?.plan ?? 'free'
+  const meta = TIER_META[currentPlan]
+
   return (
-    <div className="p-8 space-y-8 max-w-6xl">
+    <div className="p-6 lg:p-8 max-w-6xl space-y-8">
+      {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Subscription & Billing</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+          Subscription & Billing
+        </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Manage your Pulse SaaS platform subscription tiers and payment methods.
+          Manage your Pulse plan, usage limits, and payment details.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {TIERS.map((tier) => (
-          <div
-            key={tier.name}
-            className={`relative rounded-xl p-6 flex flex-col justify-between backdrop-blur-sm shadow-xl transition-all duration-200 ${
-              tier.popular
-                ? 'bg-purple-900/10 dark:bg-purple-950/40 border-2 border-purple-500'
-                : 'bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700'
+      {/* Stripe redirect toasts */}
+      <AnimatePresence>
+        {stripeSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 text-sm font-medium"
+          >
+            <Check className="h-5 w-5 shrink-0" />
+            Payment successful! Your plan is being activated — this page will update automatically.
+          </motion.div>
+        )}
+        {stripeCanceled && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-300 text-sm font-medium"
+          >
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            Checkout was canceled. No charges were made.
+          </motion.div>
+        )}
+        {toastMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className={`flex items-center gap-3 p-4 rounded-xl text-sm font-medium border ${
+              toastMsg.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+                : 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300'
             }`}
           >
-            {tier.popular && (
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold rounded-full uppercase tracking-wider shadow-md flex items-center gap-1">
-                <Sparkles className="h-3 w-3" /> Most Popular
+            {toastMsg.type === 'success' ? <Check className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
+            {toastMsg.text}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Current Plan Card */}
+      {loading ? (
+        <div className="h-44 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 animate-pulse" />
+      ) : status ? (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+          className={`bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-xl border-2 ${meta.ring} relative overflow-hidden`}
+        >
+          {/* Decorative gradient blob */}
+          <div className={`absolute -top-8 -right-8 w-40 h-40 rounded-full bg-gradient-to-br ${meta.gradient} opacity-10 blur-2xl`} />
+
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
+            <div className="space-y-4 flex-1">
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-xl bg-gradient-to-br ${meta.gradient} text-white shadow-lg`}>
+                  {meta.icon}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                      {status.displayName} Plan
+                    </h2>
+                    <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full ${meta.badge}`}>
+                      Active
+                    </span>
+                  </div>
+                  {status.monthlyUsdCents > 0 ? (
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      ${(status.monthlyUsdCents / 100).toFixed(0)}/month
+                      {status.expiresAt && (
+                        <> · Cancels {new Date(status.expiresAt).toLocaleDateString()}</>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-400 mt-0.5">Free tier — no charge</p>
+                  )}
+                </div>
               </div>
-            )}
 
-            <div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">{tier.name}</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{tier.description}</p>
+              <UsageMeter
+                current={status.customerCount}
+                cap={status.customerCap}
+                pct={status.usagePct}
+              />
 
-              <div className="mt-4 flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold text-slate-900 dark:text-slate-100">{tier.price}</span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">{tier.period}</span>
-              </div>
-
-              <ul className="mt-6 space-y-3">
-                {tier.features.map((feat) => (
-                  <li key={feat} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                    <Check className="h-4 w-4 text-purple-500 shrink-0" />
-                    <span>{feat}</span>
-                  </li>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                {[
+                  {
+                    icon: <Users className="h-3.5 w-3.5" />,
+                    label: 'Customer Cap',
+                    value: status.customerCap ? status.customerCap.toLocaleString() : 'Unlimited',
+                  },
+                  {
+                    icon: <Calendar className="h-3.5 w-3.5" />,
+                    label: 'Data Retention',
+                    value: status.retentionDays ? `${status.retentionDays} days` : 'Unlimited',
+                  },
+                  {
+                    icon: <Download className="h-3.5 w-3.5" />,
+                    label: 'Data Exports',
+                    value: status.exports ? 'Enabled' : 'Unavailable',
+                  },
+                  {
+                    icon: <Shield className="h-3.5 w-3.5" />,
+                    label: 'Team Admins',
+                    value: status.teamAdminCap === Infinity ? 'Unlimited' : `Up to ${status.teamAdminCap}`,
+                  },
+                ].map(({ icon, label, value }) => (
+                  <div key={label} className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <div className="flex items-center gap-1.5 text-slate-400 mb-1">
+                      {icon}
+                      <span className="text-[10px] uppercase tracking-wider font-semibold">{label}</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{value}</p>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
 
-            <div className="mt-8">
+            {/* Actions */}
+            <div className="flex flex-col gap-2 shrink-0">
               <button
-                type="button"
-                onClick={() => handleSubscribe(tier.name)}
-                disabled={loadingTier === tier.name}
-                className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  tier.popular
-                    ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                    : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:opacity-90'
-                }`}
+                onClick={() => fetchStatus()}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
               >
-                {loadingTier === tier.name ? 'Redirecting to Stripe…' : tier.buttonText}
+                <RefreshCw className="h-3 w-3" /> Refresh
               </button>
+              {status.hasActiveSubscription && (
+                <button
+                  onClick={handlePortal}
+                  disabled={portalLoading}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors"
+                >
+                  {portalLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ExternalLink className="h-3 w-3" />}
+                  Manage Subscription
+                </button>
+              )}
             </div>
           </div>
-        ))}
+        </motion.div>
+      ) : (
+        <div className="p-6 bg-rose-50 dark:bg-rose-950/30 rounded-2xl border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 text-sm">
+          Could not load billing status. Make sure you're signed in and the API is running.
+        </div>
+      )}
+
+      {/* Plan Upgrade Grid */}
+      <div>
+        <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">
+          {currentPlan === 'free' ? 'Choose a Plan' : 'Upgrade or Switch Plan'}
+        </h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
+          All plans include full dashboard access, MRR tracking, churn analytics, and Stripe webhook integration.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {PLANS.map((plan, i) => {
+            const isCurrent = plan.key === currentPlan
+            const meta = TIER_META[plan.key]
+
+            return (
+              <motion.div
+                key={plan.key}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.06 }}
+                className={`relative flex flex-col rounded-2xl p-6 border-2 shadow-lg transition-all duration-200 ${
+                  plan.popular
+                    ? 'border-purple-500 bg-purple-900/5 dark:bg-purple-950/30'
+                    : isCurrent
+                    ? 'border-emerald-400 dark:border-emerald-600 bg-emerald-50/40 dark:bg-emerald-950/20'
+                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
+                }`}
+              >
+                {plan.popular && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[11px] font-bold rounded-full uppercase tracking-wider shadow-md flex items-center gap-1.5">
+                    <Sparkles className="h-3 w-3" /> Most Popular
+                  </div>
+                )}
+                {isCurrent && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3 py-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[11px] font-bold rounded-full uppercase tracking-wider shadow-md flex items-center gap-1.5">
+                    <Check className="h-3 w-3" /> Current Plan
+                  </div>
+                )}
+
+                <div className="mb-5">
+                  <div className={`inline-flex p-2.5 rounded-xl bg-gradient-to-br ${meta.gradient} text-white shadow mb-3`}>
+                    {meta.icon}
+                  </div>
+                  <h3 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">{plan.name}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{plan.tagline}</p>
+                  <div className="flex items-baseline gap-1 mt-4">
+                    <span className="text-3xl font-extrabold text-slate-900 dark:text-slate-100">{plan.price}</span>
+                    <span className="text-xs text-slate-400">{plan.period}</span>
+                  </div>
+                </div>
+
+                <ul className="flex-1 space-y-2.5 mb-6">
+                  {plan.features.map((feat) => (
+                    <li key={feat} className="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300">
+                      <Check className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${plan.popular ? 'text-purple-500' : 'text-emerald-500'}`} />
+                      {feat}
+                    </li>
+                  ))}
+                </ul>
+
+                <button
+                  type="button"
+                  onClick={() => handleSubscribe(plan.key)}
+                  disabled={isCurrent || checkoutLoading === plan.key}
+                  className={`w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+                    isCurrent
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 cursor-default'
+                      : plan.popular
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-lg shadow-purple-500/20'
+                      : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:opacity-90'
+                  }`}
+                >
+                  {checkoutLoading === plan.key ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Redirecting to Stripe…
+                    </>
+                  ) : isCurrent ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Current Plan
+                    </>
+                  ) : (
+                    <>
+                      Subscribe to {plan.name}
+                      <ChevronRight className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
+              </motion.div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* FAQ / Notes */}
+      <div className="bg-slate-50 dark:bg-slate-900/60 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 text-xs space-y-2 text-slate-500 dark:text-slate-400">
+        <p className="font-semibold text-slate-700 dark:text-slate-300 text-sm mb-3">Billing notes</p>
+        <p>• All plans are billed monthly. Annual billing (with discount) coming soon.</p>
+        <p>• Upgrade takes effect immediately. Downgrade takes effect at the end of the current billing period.</p>
+        <p>• Usage limits (customer cap) are measured against active customers only — canceled/churned customers don't count.</p>
+        <p>• Data is retained for your plan's window. Downgrading to Free trims data older than 30 days.</p>
+        <p>• Questions? <a href="mailto:support@pulseanalytics.io" className="text-purple-500 hover:underline">support@pulseanalytics.io</a></p>
       </div>
     </div>
   )

@@ -18,6 +18,9 @@ import exportRouter from './modules/export/export.routes'
 import auditRouter from './modules/audit/audit.routes'
 import authRouter from './modules/auth/auth.routes'
 import stripeWebhookRouter from './modules/billing/stripe.webhook'
+import vendorBillingRouter from './modules/vendor-billing/vendor-billing.routes'
+import vendorWebhookRouter from './modules/vendor-billing/vendor-billing.webhook'
+import { planGate, exportGate } from './modules/vendor-billing/plan-gate.middleware'
 
 dotenv.config()
 
@@ -82,6 +85,7 @@ app.use(cors({
 // verification, so the raw parser must run for that path BEFORE express.json().
 // express.json() skips paths where the body was already consumed.
 app.use('/webhooks/stripe', express.raw({ type: 'application/json' }))
+app.use('/webhooks/stripe-vendor', express.raw({ type: 'application/json' }))
 app.use(express.json({ limit: '1mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser(config.cookieSecret))
@@ -97,21 +101,31 @@ app.use(tokenRefreshMiddleware)
 // Auth routes (public)
 app.use('/api/auth', authRouter)
 
-// Protected Routes
-app.use('/api/kpis', verifyJwt, kpisRouter)
+// Protected Routes (planGate enforces customer cap per subscription tier)
+app.use('/api/kpis', verifyJwt, planGate, kpisRouter)
 app.use('/api/mrr', verifyJwt, mrrRouter)
-app.use('/api/funnel', verifyJwt, funnelRouter)
-app.use('/api/accounts', verifyJwt, accountsRouter)
-app.use('/api/health', verifyJwt, healthRouter)
-app.use('/api/export', verifyJwt, exportRouter)
+app.use('/api/funnel', verifyJwt, planGate, funnelRouter)
+app.use('/api/accounts', verifyJwt, planGate, accountsRouter)
+app.use('/api/health', verifyJwt, planGate, healthRouter)
+app.use('/api/export', verifyJwt, exportGate, exportRouter)
 app.use('/api/audit-logs', verifyJwt, auditRouter)
 
-// Stripe Webhook (raw body required)
+// Vendor Billing — Pulse's own subscription management
+app.use('/api/vendor-billing', verifyJwt, vendorBillingRouter)
+
+// Stripe Webhooks (raw body required)
 app.use('/webhooks/stripe', stripeWebhookRouter)
+app.use('/webhooks/stripe-vendor', vendorWebhookRouter)
+
+import { sentry } from './modules/shared/lib/sentry'
 
 // Error Handler
-app.use((err: Error, _req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack)
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  sentry.captureException(err, {
+    path: req.path,
+    method: req.method,
+    companyId: (req as any).companyId,
+  })
   res.status(500).json({ error: 'Internal server error' })
 })
 

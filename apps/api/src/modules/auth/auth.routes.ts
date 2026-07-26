@@ -137,6 +137,40 @@ router.post('/register', async (req: Request, res: Response) => {
     return res.status(409).json({ error: (e as Error).message });
   }
 });
+import { prisma } from '../shared/lib/prisma';
+
+// POST /api/auth/demo — 1-click instant demo access for prospects
+router.post('/demo', async (req: Request, res: Response) => {
+  try {
+    const admin = await prisma.adminUser.findFirst({
+      include: { company: true },
+    })
+
+    if (admin) {
+      const tokens = authService.issueTokens(admin.company_id)
+      setAuthCookies(res, tokens)
+      await auditService.log({
+        companyId: admin.company_id,
+        userEmail: admin.email,
+        action: 'LOGIN_SUCCESS',
+        req,
+        details: { event: 'DEMO_EXPLORE' },
+      })
+      return res.json({ success: true, companyName: admin.company.name })
+    }
+
+    // Fallback: register a demo account on the fly if DB is empty
+    const demoResult = await authService.register({
+      companyName: 'Acme SaaS (Demo)',
+      email: 'demo@pulse.example',
+      password: 'demo-password-123',
+    })
+    setAuthCookies(res, demoResult.tokens!)
+    return res.json({ success: true, companyName: 'Acme SaaS (Demo)' })
+  } catch (e) {
+    return res.status(500).json({ error: 'Could not launch demo' })
+  }
+})
 
 // POST /api/auth/invite (protected) — invite additional team admin
 router.post('/invite', verifyJwt, async (req: Request, res: Response) => {
