@@ -2,6 +2,7 @@ import express from 'express'
 import { verifyJwt } from '../auth/auth.middleware'
 import { validateQuery } from '../shared/middleware/validation'
 import { prisma } from '../shared/lib/prisma'
+import { auditService } from '../shared/lib/audit.service'
 import { exportQuerySchema, CSV_HEADER, toCsvRow } from './export.schema'
 
 const router = express.Router()
@@ -31,6 +32,15 @@ router.get('/', verifyJwt, validateQuery(exportQuerySchema), async (req, res) =>
       where: { company_id: companyId },
       orderBy: { date: 'asc' },
       ...(take ? { take } : {}),
+    })
+
+    // Record audit trail event
+    await auditService.log({
+      companyId,
+      userEmail: 'admin@pulse.example',
+      action: 'EXPORT_DATA',
+      req,
+      details: { format, range, recordCount: snapshots.length },
     })
 
     if (format === 'json') {

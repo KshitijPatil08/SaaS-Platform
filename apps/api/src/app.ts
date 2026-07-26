@@ -15,6 +15,7 @@ import funnelRouter from './modules/analytics/funnel.routes'
 import accountsRouter from './modules/accounts/accounts.routes'
 import healthRouter from './modules/analytics/health.routes'
 import exportRouter from './modules/export/export.routes'
+import auditRouter from './modules/audit/audit.routes'
 import authRouter from './modules/auth/auth.routes'
 import stripeWebhookRouter from './modules/billing/stripe.webhook'
 
@@ -103,6 +104,7 @@ app.use('/api/funnel', verifyJwt, funnelRouter)
 app.use('/api/accounts', verifyJwt, accountsRouter)
 app.use('/api/health', verifyJwt, healthRouter)
 app.use('/api/export', verifyJwt, exportRouter)
+app.use('/api/audit-logs', verifyJwt, auditRouter)
 
 // Stripe Webhook (raw body required)
 app.use('/webhooks/stripe', stripeWebhookRouter)

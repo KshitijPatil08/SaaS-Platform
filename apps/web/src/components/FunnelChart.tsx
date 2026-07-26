@@ -1,123 +1,110 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { motion } from 'framer-motion'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { useFunnel, FunnelData } from '../hooks/useKpis'
+import { Users, UserPlus, Zap, PlayCircle, CreditCard } from 'lucide-react'
 
 interface FunnelStage {
   stage: string
+  key: string
   count: number
   percentage: number
   color: string
+  icon: React.ReactNode
 }
 
-const STAGE_COLORS = ['#8B5CF6', '#7C3AED', '#6D28D9', '#5B21B6', '#4C1D95']
+const STAGES_CONFIG = [
+  { key: 'visitors',   stage: 'Visitors',        color: '#8B5CF6', icon: <Users className="h-4 w-4" /> },
+  { key: 'signups',    stage: 'Signups',          color: '#6D28D9', icon: <UserPlus className="h-4 w-4" /> },
+  { key: 'activations',stage: 'Activated',        color: '#5B21B6', icon: <Zap className="h-4 w-4" /> },
+  { key: 'trials',     stage: 'Trial Started',    color: '#4C1D95', icon: <PlayCircle className="h-4 w-4" /> },
+  { key: 'paid',       stage: 'Paid Customer',    color: '#2E1065', icon: <CreditCard className="h-4 w-4" /> },
+]
 
 const FunnelChart: React.FC = () => {
   const { data, isLoading } = useFunnel()
-  const [animatedStages, setAnimatedStages] = useState<FunnelStage[]>([])
-
-  useEffect(() => {
-    if (!data) return
-    const stages: FunnelStage[] = [
-      { stage: 'Visitors', count: data.visitors, percentage: 100, color: STAGE_COLORS[0] },
-      { stage: 'Signups', count: data.signups, percentage: data.conversionRates.signup, color: STAGE_COLORS[1] },
-      { stage: 'Activated', count: data.activations, percentage: data.conversionRates.activation, color: STAGE_COLORS[2] },
-      { stage: 'Trial Users', count: data.trials, percentage: data.conversionRates.trial, color: STAGE_COLORS[3] },
-      { stage: 'Paid Customers', count: data.paid, percentage: data.conversionRates.paid, color: STAGE_COLORS[4] },
-    ]
-    setAnimatedStages(stages.map(s => ({ ...s, count: 0 })))
-
-    let step = 0
-    const interval = setInterval(() => {
-      if (step >= 100) {
-        clearInterval(interval)
-        return
-      }
-      step += 2
-      setAnimatedStages(stages.map(s => ({ ...s, count: Math.floor(s.count * step / 100) })))
-    }, 30)
-    return () => clearInterval(interval)
-  }, [data])
-
-  const formatNumber = (num: number) => num.toLocaleString()
 
   if (isLoading) {
     return (
-      <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-xl p-6 shadow-xl border border-slate-200 dark:border-slate-700">
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-6">Conversion Funnel</h3>
-        <p className="text-sm text-slate-500">Loading…</p>
+      <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 animate-pulse">
+        <div className="h-4 w-36 bg-slate-200 dark:bg-slate-700 rounded mb-6" />
+        {[100, 80, 60, 40, 20].map((w, i) => (
+          <div key={i} className="mb-4 space-y-1">
+            <div className="h-3 w-24 bg-slate-200 dark:bg-slate-700 rounded" />
+            <div className="h-8 rounded-lg bg-slate-100 dark:bg-slate-700/40" style={{ width: `${w}%` }} />
+          </div>
+        ))}
       </div>
     )
   }
 
-  return (
-    <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-xl p-6 shadow-xl border border-slate-200 dark:border-slate-700">
-      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-6">Conversion Funnel</h3>
+  const allZero = !data || (data.visitors === 0 && data.paid === 0)
 
-      <div className="space-y-4">
-        {animatedStages.map((stage, index) => (
+  if (allZero) {
+    return (
+      <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 min-h-[240px]">
+        <p className="text-2xl">📊</p>
+        <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">No conversion data captured yet</p>
+        <p className="text-xs text-slate-400 text-center max-w-xs">
+          Your conversion pipeline automatically populates as visitors progress from signup to paid subscription.
+        </p>
+      </div>
+    )
+  }
+
+  const visitors = data!.visitors || 1  // avoid division by 0
+  const stages: FunnelStage[] = STAGES_CONFIG.map(cfg => {
+    const count = data![cfg.key as keyof FunnelData] as number
+    const percentage = Math.round((count / visitors) * 100)
+    return { ...cfg, count, percentage }
+  })
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700">
+      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-6">Conversion Funnel</h3>
+
+      <div className="space-y-3">
+        {stages.map((stage, index) => (
           <motion.div
             key={stage.stage}
-            initial={{ opacity: 0, x: -20 }}
+            initial={{ opacity: 0, x: -16 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: index * 0.1, duration: 0.5 }}
-            className="group"
+            transition={{ delay: index * 0.08, duration: 0.4 }}
           >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{stage.stage}</span>
-              <span className="text-sm font-bold text-slate-900 dark:text-slate-100">{formatNumber(stage.count)}</span>
+            <div className="flex items-center justify-between mb-1.5 text-xs">
+              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                <span style={{ color: stage.color }}>{stage.icon}</span>
+                <span className="font-medium">{stage.stage}</span>
+              </div>
+              <div className="flex items-center gap-3 text-slate-700 dark:text-slate-300">
+                <span className="font-semibold tabular-nums">{stage.count.toLocaleString()}</span>
+                <span className="text-slate-400 w-10 text-right">{stage.percentage}%</span>
+              </div>
             </div>
-            <div className="relative h-8 rounded-lg overflow-hidden bg-slate-200 dark:bg-slate-700">
+
+            <div className="relative h-7 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-700/50">
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${stage.percentage}%` }}
-                transition={{ duration: 1.2, delay: index * 0.15, ease: 'easeOut' }}
-                className="h-full rounded-l-lg transition-all duration-1000"
-                style={{ backgroundColor: stage.color }}
+                animate={{ width: `${Math.max(stage.percentage, 2)}%` }}
+                transition={{ duration: 1.0, delay: index * 0.1, ease: 'easeOut' }}
+                className="h-full rounded-lg opacity-90"
+                style={{ background: `linear-gradient(90deg, ${stage.color}cc, ${stage.color})` }}
               />
-              <div className="absolute inset-0 flex items-center justify-end pr-4">
-                <span className="text-xs font-semibold text-white drop-shadow-lg">
-                  {stage.percentage}%
-                </span>
-              </div>
             </div>
           </motion.div>
         ))}
       </div>
 
-      {/* Alternative: Horizontal bar chart with Recharts */}
-      <ResponsiveContainer width="100%" height={280} className="mt-8">
-        <BarChart data={animatedStages} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
-          <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-          <XAxis type="number" axisLine={false} tickLine={false} tick={false} />
-          <YAxis
-            dataKey="stage"
-            type="category"
-            axisLine={false}
-            tickLine={false}
-            tick={{ fill: 'currentColor', opacity: 0.7, fontSize: 12 }}
-            width={100}
-          />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: 'rgba(30, 41, 59, 0.95)',
-              border: '1px solid rgba(148, 163, 184, 0.2)',
-              borderRadius: '12px',
-            }}
-            labelStyle={{ color: '#fff' }}
-            itemStyle={{ color: '#fff' }}
-          />
-          <Bar
-            dataKey="count"
-            radius={[8, 0, 0, 8]}
-            maxBarSize={40}
-          >
-            {animatedStages.map((stage, index) => (
-              <Cell key={`cell-${index}`} fill={stage.color} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+      {/* Conversion summary */}
+      {data && data.visitors > 0 && data.paid > 0 && (
+        <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-700">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">Overall Visitor → Paid Conversion Rate</span>
+            <span className="font-extrabold text-purple-600 dark:text-purple-400 text-sm">
+              {((data.paid / data.visitors) * 100).toFixed(1)}%
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

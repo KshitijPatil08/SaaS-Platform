@@ -1,11 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 
-export const dateRangeSchema = z.object({
-  start: z.string().datetime().optional(),
-  end: z.string().datetime().optional(),
-})
-
 export function validateQuery(schema: z.ZodTypeAny) {
   return (req: Request, res: Response, next: NextFunction) => {
     const result = schema.safeParse(req.query)

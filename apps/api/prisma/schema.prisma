@@ -22,6 +22,7 @@ model Company {
   churn_events  ChurnEvent[]
   health_scores HealthScore[]
   admins      AdminUser[]
+  audit_logs  AuditLog[]
 }
 
 model AdminUser {
@@ -135,4 +136,19 @@ model ChurnEvent {
 
   @@index([company_id])
   @@index([reason])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  company_id String
+  company    Company  @relation(fields: [company_id], references: [id])
+  user_email String
+  action     String   // 'LOGIN_SUCCESS' | 'LOGIN_FAILED' | 'EXPORT_DATA' | 'UPDATE_PROFILE' | 'ENROLL_MFA' | 'CONFIRM_MFA' | 'RESET_LOCKOUT'
+  ip_address String?
+  user_agent String?
+  details    String   @default("{}")
+  created_at DateTime @default(now())
+
+  @@index([company_id, created_at(sort: Desc)])
+  @@index([action])
 }

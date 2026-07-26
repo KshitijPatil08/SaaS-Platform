@@ -1,0 +1,128 @@
+import React, { useState } from 'react'
+import { Sparkles, ArrowRight, CheckCircle2, Copy, Check, Key, Link as LinkIcon, Database } from 'lucide-react'
+import { api } from '../lib/api'
+
+interface OnboardingBannerProps {
+  webhookUrl: string
+  onDataSeeded?: () => void
+}
+
+export const OnboardingBanner: React.FC<OnboardingBannerProps> = ({ webhookUrl, onDataSeeded }) => {
+  const [copied, setCopied] = useState(false)
+  const [stripeKey, setStripeKey] = useState('')
+  const [keySaved, setKeySaved] = useState(false)
+  const [seeding, setSeeding] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
+
+  if (dismissed) return null
+
+  const handleCopy = () => {
+    if (!webhookUrl) return
+    navigator.clipboard.writeText(webhookUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleSaveKey = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!stripeKey) return
+    try {
+      await api.put('/api/auth/profile', { stripeId: stripeKey })
+      setKeySaved(true)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return (
+    <div className="bg-gradient-to-r from-purple-900/90 via-slate-900 to-indigo-950 text-white rounded-2xl p-6 shadow-xl border border-purple-500/30 relative overflow-hidden mb-6">
+      <div className="absolute top-0 right-0 p-4 opacity-10">
+        <Sparkles className="h-32 w-32 text-purple-400" />
+      </div>
+
+      <div className="relative z-10 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-purple-500/20 text-purple-300 ring-1 ring-purple-500/40">
+              <Sparkles className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="text-base font-bold">Welcome to Pulse SaaS Analytics!</h2>
+              <p className="text-xs text-purple-200">Complete your quick 3-step setup to unlock real-time revenue intelligence</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setDismissed(true)}
+            className="text-xs text-purple-300 hover:text-white underline"
+          >
+            Dismiss
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+          {/* Step 1 */}
+          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                <LinkIcon className="h-3.5 w-3.5" /> 1. Webhook URL
+              </span>
+              {copied && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
+            </div>
+            <p className="text-[11px] text-slate-300">Copy your endpoint into Stripe Dashboard &gt; Webhooks</p>
+            <button
+              onClick={handleCopy}
+              className="w-full py-1.5 px-3 bg-purple-600/60 hover:bg-purple-600 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+            >
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? 'Copied URL' : 'Copy Webhook URL'}
+            </button>
+          </div>
+
+          {/* Step 2 */}
+          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Key className="h-3.5 w-3.5" /> 2. Stripe Account ID
+              </span>
+              {keySaved && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
+            </div>
+            <form onSubmit={handleSaveKey} className="flex gap-1.5">
+              <input
+                type="text"
+                placeholder="acct_xxx or cus_xxx"
+                value={stripeKey}
+                onChange={e => setStripeKey(e.target.value)}
+                className="flex-1 px-2.5 py-1 bg-slate-900/80 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-purple-400"
+              />
+              <button
+                type="submit"
+                className="px-3 py-1 bg-purple-600 hover:bg-purple-500 rounded-lg text-xs font-semibold"
+              >
+                Save
+              </button>
+            </form>
+          </div>
+
+          {/* Step 3 */}
+          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Database className="h-3.5 w-3.5" /> 3. Test Demo Data
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-300">Populate sample metrics to preview dashboard charts</p>
+            <button
+              onClick={() => {
+                if (onDataSeeded) onDataSeeded()
+                setDismissed(true)
+              }}
+              className="w-full py-1.5 px-3 bg-emerald-600/80 hover:bg-emerald-600 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <ArrowRight className="h-3.5 w-3.5" /> Load Sample Data
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -17,6 +17,8 @@ export interface LoginResult {
   success: boolean
   tokens?: AuthTokens
   mfaRequired?: boolean
+  companyId?: string
+  adminEmail?: string
 }
 
 const ACCESS_MAX_AGE = 15 * 60 * 1000
@@ -36,12 +38,8 @@ export const cookieOptions = {
   maxAge: ACCESS_MAX_AGE,
 }
 
-// Precomputed valid bcrypt hash so the dummy comparison never throws.
-// (The previous code used '$2b$10$dummy', an invalid hash that made
-// bcrypt.compare throw — turning "user not found" into a 500.)
 const DUMMY_HASH = bcrypt.hashSync('dummy-consumes-cpu', 10)
 
-// Constant-time-ish failure to avoid user enumeration
 async function consumeCpu() {
   await bcrypt.compare('dummy-hash-to-consume-cpu', DUMMY_HASH)
 }
@@ -56,12 +54,12 @@ export const authService = {
 
     const valid = await bcrypt.compare(input.password, admin.password_hash)
     if (!valid) {
-      return { success: false }
+      return { success: false, companyId: admin.company_id, adminEmail: admin.email }
     }
 
     if (admin.mfa_enabled) {
       if (!input.mfaToken) {
-        return { success: false, mfaRequired: true }
+        return { success: false, mfaRequired: true, companyId: admin.company_id, adminEmail: admin.email }
       }
       const ok = speakeasy.totp.verify({
         secret: admin.mfa_secret ?? '',
@@ -70,11 +68,16 @@ export const authService = {
         window: 1,
       })
       if (!ok) {
-        return { success: false }
+        return { success: false, companyId: admin.company_id, adminEmail: admin.email }
       }
     }
 
-    return { success: true, tokens: issueTokens(admin.company_id) }
+    return {
+      success: true,
+      tokens: issueTokens(admin.company_id),
+      companyId: admin.company_id,
+      adminEmail: admin.email,
+    }
   },
 
   async enrollMfa(input: MfaEnrollInput) {
@@ -122,23 +125,52 @@ export const authService = {
             mfa_enabled: true,
             created_at: true,
           },
+          orderBy: { created_at: 'asc' },
         },
       },
     })
     if (!company) throw new Error('Company not found')
-    const admin = company.admins[0]
+    const primaryAdmin = company.admins[0]
     return {
       companyId: company.id,
       companyName: company.name,
       stripeId: company.stripe_id,
-      admin: admin ? { email: admin.email, mfaEnabled: admin.mfa_enabled } : null,
+      admin: primaryAdmin ? { email: primaryAdmin.email, mfaEnabled: primaryAdmin.mfa_enabled } : null,
+      admins: company.admins.map(a => ({
+        id: a.id,
+        email: a.email,
+        mfaEnabled: a.mfa_enabled,
+        createdAt: a.created_at,
+      })),
       webhookUrl: `${config.clientOrigin.replace(':3000', ':5000')}/webhooks/stripe?company_id=${company.id}`,
+    }
+  },
+
+  async inviteAdmin(companyId: string, email: string, initialPassword?: string) {
+    const existing = await prisma.adminUser.findFirst({ where: { email } })
+    if (existing) {
+      throw new Error('User with this email is already registered')
+    }
+    const tempPassword = initialPassword || 'PulseAdmin2026!'
+    const password_hash = await bcrypt.hash(tempPassword, 12)
+    const newAdmin = await prisma.adminUser.create({
+      data: {
+        company_id: companyId,
+        email,
+        password_hash,
+      },
+    })
+    return {
+      id: newAdmin.id,
+      email: newAdmin.email,
+      tempPassword,
+      created_at: newAdmin.created_at,
     }
   },
 
   async updateProfile(
     companyId: string,
-    data: { companyName?: string; email?: string; currentPassword?: string; newPassword?: string }
+    data: { companyName?: string; email?: string; currentPassword?: string; newPassword?: string; stripeId?: string }
   ) {
     const admin = await prisma.adminUser.findFirst({ where: { company_id: companyId } })
     if (!admin) throw new Error('Admin user not found')
@@ -161,10 +193,13 @@ export const authService = {
       })
     }
 
-    if (data.companyName) {
+    if (data.companyName || data.stripeId !== undefined) {
       await prisma.company.update({
         where: { id: companyId },
-        data: { name: data.companyName },
+        data: {
+          ...(data.companyName ? { name: data.companyName } : {}),
+          ...(data.stripeId !== undefined ? { stripe_id: data.stripeId } : {}),
+        },
       })
     }
 
@@ -183,7 +218,8 @@ export const authService = {
         admins: { create: { email: input.email, password_hash } },
       },
     })
-    return { success: true, companyId: company.id }
+    const tokens = issueTokens(company.id)
+    return { success: true, companyId: company.id, tokens }
   },
 
   issueTokens,
