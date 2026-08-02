@@ -101,6 +101,17 @@ export function useAccounts(page = 1, pageSize = 10, status?: string, search?: s
   })
 }
 
+export function useAccount(id: string | null) {
+  return useQuery<Account>({
+    queryKey: ['account', id],
+    queryFn: async () => {
+      const { data } = await api.get(`/api/accounts/${id}`)
+      return data
+    },
+    enabled: !!id,
+  })
+}
+
 // ─── Profile — used by Dashboard for real webhookUrl ─────────────────────────
 
 export interface ProfileData {

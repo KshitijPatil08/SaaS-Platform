@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { api } from '../lib/api'
+import { useAccounts } from '../hooks/useKpis'
 import {
   Sparkles, Check, Zap, Shield, Crown, ExternalLink,
   TrendingUp, Users, Calendar, Download, AlertTriangle,
-  ChevronRight, Loader2, RefreshCw,
+  ChevronRight, Loader2, RefreshCw, ChevronDown, XCircle, Clock, CheckCircle,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -139,6 +140,102 @@ const UsageMeter: React.FC<{ current: number; cap: number | null; pct: number }>
           Approaching your plan limit — consider upgrading
         </p>
       )}
+    </div>
+  )
+}
+
+// ─── Customer Cap List ────────────────────────────────────────────────────────
+
+const statusIcon: Record<string, React.ReactNode> = {
+  active:   <CheckCircle className="h-3 w-3 text-emerald-500" />,
+  trialing: <Clock className="h-3 w-3 text-blue-500" />,
+  past_due: <AlertTriangle className="h-3 w-3 text-amber-500" />,
+  canceled: <XCircle className="h-3 w-3 text-rose-500" />,
+}
+
+const CustomerCapList: React.FC<{ cap: number; current: number }> = ({ cap, current }) => {
+  const [open, setOpen] = useState(false)
+  const { data, isLoading } = useAccounts(1, Math.min(cap, 50))
+  const accounts = data?.data ?? []
+  const pct = cap ? Math.round((current / cap) * 100) : 0
+  const isNearLimit = pct >= 70
+
+  if (!isNearLimit) return null
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg ${pct >= 90 ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-500' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-500'}`}>
+            <Users className="h-4 w-4" />
+          </div>
+          <div className="text-left">
+            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {pct >= 90 ? '⚠️ Approaching customer limit' : 'Customer usage'}
+            </p>
+            <p className="text-xs text-slate-400">
+              {current.toLocaleString()} of {cap.toLocaleString()} customers used — {pct}% of your plan cap
+            </p>
+          </div>
+        </div>
+        <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="border-t border-slate-100 dark:border-slate-700">
+              <div className="px-5 py-2.5 bg-amber-50 dark:bg-amber-950/20 border-b border-amber-100 dark:border-amber-900/30">
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">
+                  Showing your top {Math.min(cap, 50)} active customers. Upgrade your plan to track more.
+                </p>
+              </div>
+              {isLoading ? (
+                <div className="p-4 space-y-3 animate-pulse">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-2.5 w-28 bg-slate-200 dark:bg-slate-700 rounded" />
+                        <div className="h-2 w-36 bg-slate-100 dark:bg-slate-700/60 rounded" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-50 dark:divide-slate-700/50 max-h-72 overflow-y-auto">
+                  {accounts.map((acc, i) => (
+                    <div key={acc.id} className="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                        {acc.name.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">{acc.name}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{acc.email}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {statusIcon[acc.status]}
+                        <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 tabular-nums">
+                          {acc.mrr_cents ? `$${(acc.mrr_cents / 100).toFixed(0)}/mo` : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -373,6 +470,11 @@ const BillingPage: React.FC = () => {
         <div className="p-6 bg-rose-50 dark:bg-rose-950/30 rounded-2xl border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 text-sm">
           Could not load billing status. Make sure you're signed in and the API is running.
         </div>
+      )}
+
+      {/* Customer Cap List — only shown when usage >= 70% */}
+      {status?.customerCap && (
+        <CustomerCapList cap={status.customerCap} current={status.customerCount} />
       )}
 
       {/* Plan Upgrade Grid */}

@@ -26,6 +26,10 @@ export const accountsService = {
     return where
   },
 
+  async getById(id: string, companyId: string) {
+    return prisma.customer.findFirst({ where: { id, company_id: companyId } })
+  },
+
   async list(query: AccountsQuery, companyId: string): Promise<PaginatedAccounts> {
     const page = Math.max(1, query.page)
     const pageSize = Math.min(100, query.pageSize)

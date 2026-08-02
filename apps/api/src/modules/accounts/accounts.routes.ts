@@ -23,4 +23,19 @@ router.get('/', verifyJwt, validateQuery(accountsQuerySchema), async (req, res) 
   }
 })
 
+// GET /api/accounts/:id
+// Returns a single account by ID (scoped to the authenticated company)
+router.get('/:id', verifyJwt, async (req, res) => {
+  try {
+    const companyId = req.companyId
+    if (!companyId) return res.status(401).json({ error: 'Unauthorized' })
+    const account = await accountsService.getById(req.params.id, companyId)
+    if (!account) return res.status(404).json({ error: 'Account not found' })
+    return res.json(account)
+  } catch (error) {
+    console.error('Account fetch error:', error)
+    return res.status(500).json({ error: 'Failed to fetch account' })
+  }
+})
+
 export default router

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Download, RefreshCw, AlertCircle, Clock, Activity } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Download, RefreshCw, AlertCircle, Clock, Activity, ChevronRight } from 'lucide-react';
 import KPICard from '../components/KPICard';
 import MRRChart from '../components/MRRChart';
 import FunnelChart from '../components/FunnelChart';
@@ -16,24 +17,28 @@ const KPI_CONFIGS = [
     colorClass: 'from-purple-500 to-indigo-600',
     borderColor: 'linear-gradient(90deg, #8B5CF6, #6366F1)',
     format: 'currency' as const,
+    linkTo: '/accounts',
   },
   {
     title: 'Active Customers',
     colorClass: 'from-blue-500 to-cyan-500',
     borderColor: 'linear-gradient(90deg, #3B82F6, #06B6D4)',
     format: 'count' as const,
+    linkTo: '/accounts?status=active',
   },
   {
     title: '30-Day Churn Rate',
     colorClass: 'from-rose-500 to-pink-600',
     borderColor: 'linear-gradient(90deg, #F43F5E, #EC4899)',
     format: 'percent' as const,
+    linkTo: '/accounts?status=canceled',
   },
   {
     title: 'Customer Health',
     colorClass: 'from-emerald-500 to-teal-500',
     borderColor: 'linear-gradient(90deg, #10B981, #14B8A6)',
     format: 'percent' as const,
+    linkTo: '/health',
   },
 ]
 
@@ -181,7 +186,7 @@ const Dashboard: React.FC = () => {
         />
       )}
 
-      {/* KPI Cards */}
+      {/* KPI Cards — each links to a relevant detail page */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {KPI_CONFIGS.map((cfg, i) => (
           <motion.div
@@ -190,10 +195,12 @@ const Dashboard: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.07 }}
           >
-            <KPICard
-              {...cfg}
-              {...kpiValues[i]}
-            />
+            <Link to={cfg.linkTo} className="block group">
+              <KPICard
+                {...cfg}
+                {...kpiValues[i]}
+              />
+            </Link>
           </motion.div>
         ))}
       </div>
@@ -208,14 +215,21 @@ const Dashboard: React.FC = () => {
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
+        {/* Funnel chart with drill-down link */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="space-y-2">
           <FunnelChart />
+          <Link
+            to="/funnel"
+            className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 font-medium hover:underline pl-1"
+          >
+            View full funnel breakdown <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
+        {/* Retention ring with drill-down link */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="space-y-2">
           {customerCount === 0 ? (
             <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 min-h-[240px]">
-              {/* Fix #7: replaced blue emoji with proper Lucide icon */}
               <Activity className="h-10 w-10 text-slate-300 dark:text-slate-600" />
               <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">No retention data</p>
               <p className="text-xs text-slate-400 text-center max-w-xs">Retention data appears once customers and health scores are available.</p>
@@ -223,12 +237,26 @@ const Dashboard: React.FC = () => {
           ) : (
             <RetentionRing percentage={healthPct} totalCustomers={customerCount} />
           )}
+          <Link
+            to="/health"
+            className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 font-medium hover:underline pl-1"
+          >
+            View account health details <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
         </motion.div>
       </div>
 
       {/* Accounts table — full width */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
         <AccountsTable />
+        <div className="mt-2 pl-1">
+          <Link
+            to="/accounts"
+            className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 font-medium hover:underline"
+          >
+            View all accounts <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       </motion.div>
     </div>
   );
