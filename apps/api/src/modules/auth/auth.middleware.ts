@@ -7,6 +7,7 @@ const JWT_REFRESH_SECRET = config.jwtRefreshSecret
 
 interface JwtPayload {
   companyId: string
+  adminEmail?: string
   exp?: number
 }
 
@@ -14,6 +15,7 @@ declare global {
   namespace Express {
     interface Request {
       companyId?: string
+      adminEmail?: string
     }
   }
 }
@@ -28,6 +30,7 @@ export const verifyJwt = (req: Request, res: Response, next: NextFunction) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload
     req.companyId = decoded.companyId
+    req.adminEmail = decoded.adminEmail
     next()
   } catch (error) {
     res.clearCookie('access_token')
@@ -49,6 +52,7 @@ export const tokenRefreshMiddleware = (
     try {
       const decoded = jwt.verify(accessToken, JWT_SECRET) as JwtPayload
       req.companyId = decoded.companyId
+      req.adminEmail = decoded.adminEmail
       return next()
     } catch {
       // fall through to refresh logic
@@ -60,7 +64,7 @@ export const tokenRefreshMiddleware = (
     try {
       const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as JwtPayload
       const newAccessToken = jwt.sign(
-        { companyId: decoded.companyId },
+        { companyId: decoded.companyId, adminEmail: decoded.adminEmail },
         JWT_SECRET,
         { expiresIn: '15m' }
       )
@@ -73,12 +77,10 @@ export const tokenRefreshMiddleware = (
       })
 
       req.companyId = decoded.companyId
+      req.adminEmail = decoded.adminEmail
       return next()
     } catch {
       // Stale/invalid refresh token: clear it and continue.
-      // We deliberately call next() (not 401) so public routes like
-      // /health and /api/auth/login are not blocked, and protected
-      // routes are still rejected downstream by verifyJwt.
       res.clearCookie('access_token')
       res.clearCookie('refresh_token')
       return next()

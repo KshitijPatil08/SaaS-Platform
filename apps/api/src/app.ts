@@ -14,6 +14,7 @@ import mrrRouter from './modules/billing/billing.routes'
 import funnelRouter from './modules/analytics/funnel.routes'
 import accountsRouter from './modules/accounts/accounts.routes'
 import healthRouter from './modules/analytics/health.routes'
+import churnRouter from './modules/analytics/churn.routes'
 import exportRouter from './modules/export/export.routes'
 import auditRouter from './modules/audit/audit.routes'
 import authRouter from './modules/auth/auth.routes'
@@ -110,6 +111,7 @@ app.use('/api/mrr', verifyJwt, mrrRouter)
 app.use('/api/funnel', verifyJwt, planGate, funnelRouter)
 app.use('/api/accounts', verifyJwt, planGate, accountsRouter)
 app.use('/api/health', verifyJwt, planGate, healthRouter)
+app.use('/api/churn', verifyJwt, planGate, churnRouter)
 app.use('/api/export', verifyJwt, exportGate, exportRouter)
 app.use('/api/audit-logs', verifyJwt, auditRouter)
 

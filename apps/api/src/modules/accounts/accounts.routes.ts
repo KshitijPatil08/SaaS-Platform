@@ -38,4 +38,18 @@ router.get('/:id', verifyJwt, async (req, res) => {
   }
 })
 
+// GET /api/accounts/:id/events
+// Returns recent activity events for a specific customer
+router.get('/:id/events', verifyJwt, async (req, res) => {
+  try {
+    const companyId = req.companyId
+    if (!companyId) return res.status(401).json({ error: 'Unauthorized' })
+    const events = await accountsService.getEvents(req.params.id, companyId, 50)
+    return res.json(events)
+  } catch (error) {
+    console.error('Account events fetch error:', error)
+    return res.status(500).json({ error: 'Failed to fetch customer events' })
+  }
+})
+
 export default router

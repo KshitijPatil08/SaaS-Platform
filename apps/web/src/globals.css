@@ -2,42 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom base styles */
 @layer base {
-  body {
-    @apply bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900 text-slate-900 dark:text-slate-100;
-    font-family: 'Inter', system-ui, sans-serif;
+  html {
+    scroll-behavior: smooth;
   }
 
-  * {
-    @apply border-slate-200 dark:border-slate-800;
+  body {
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
 }
 
-/* Custom utilities */
 @layer utilities {
   .glass-effect {
-    @apply bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm;
+    @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm;
   }
 
   .text-glow {
-    text-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+    text-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
   }
 }
 
-/* Animations */
-.animate-gradient {
-  background-size: 200% 200%;
-  animation: gradient 8s ease infinite;
+/* Transitions for smooth theme switching */
+body, nav, main, header, section, button, div, table, td, th {
+  transition-property: background-color, border-color, color;
+  transition-duration: 200ms;
+  transition-timing-function: ease-in-out;
 }
 
-@keyframes gradient {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+/* Custom Scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 dark:bg-slate-700 rounded-full;
 }
-
-/* Focus rings */
-.focus-ring:focus {
-  @apply ring-2 ring-purple-500 ring-opacity-50 outline-none;
-}
+::-webkit-scrollbar-thumb:hover { @apply bg-purple-500; }

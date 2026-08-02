@@ -1,11 +1,15 @@
 import { prisma } from '../shared/lib/prisma'
+import { kpiCache } from '../shared/lib/kpi-cache'
 
 // Shared aggregation helpers for the KPIs, funnel, and health endpoints.
 export const analyticsService = {
-  // Top-level KPI snapshot: MRR, active customer count, 30-day churn rate
+  // Top-level KPI snapshot: MRR, active customer count, 30-day churn rate (cached for performance)
   async getKpis(companyId: string) {
-    // Rolling 30-day window for churn — avoids inflating the rate with all-time
-    // historical churn events.
+    const cacheKey = `kpis_${companyId}`
+    const cached = kpiCache.get<{ mrr_cents: number; customer_count: number; churn_rate: number }>(cacheKey)
+    if (cached) return cached
+
+    // Rolling 30-day window for churn
     const periodStart = new Date()
     periodStart.setDate(periodStart.getDate() - 30)
 
@@ -25,21 +29,24 @@ export const analyticsService = {
       }),
     ])
 
-    // Denominator for 30-day churn rate is the customer base at start of period (active + churned during period)
+    // Denominator for 30-day churn rate is the customer base at start of period
     const startingCustomerBase = activeCustomerCount + churnCount
     const churnRate =
       startingCustomerBase > 0
         ? Math.round((churnCount / startingCustomerBase) * 1000) / 10
         : 0
 
-    return {
+    const result = {
       mrr_cents: mrrSnapshot?.mrr_cents ?? 0,
       customer_count: activeCustomerCount,
       churn_rate: churnRate,
     }
+
+    kpiCache.set(cacheKey, result, 60 * 1000) // 60s TTL
+    return result
   },
 
-  // Conversion funnel counts grouped by event name
+  // Conversion funnel counts with unique customer de-duplication
   async getFunnel(companyId: string) {
     const events = await prisma.event.groupBy({
       by: ['name'],
@@ -47,13 +54,24 @@ export const analyticsService = {
       _count: { _all: true },
     })
 
-    const countByName = new Map(events.map((e) => [e.name, e._count._all]))
+    // Query unique customer IDs per event stage
+    const distinctEvents = await prisma.event.groupBy({
+      by: ['name', 'customer_id'],
+      where: { company_id: companyId, customer_id: { not: null } },
+    })
 
-    const visitors = countByName.get('visitor') ?? 0
-    const signups = countByName.get('signup') ?? 0
-    const activations = countByName.get('activation') ?? 0
-    const trials = countByName.get('trial_started') ?? 0
-    const paid = countByName.get('subscription_created') ?? 0
+    const distinctCountByName = new Map<string, number>()
+    for (const item of distinctEvents) {
+      distinctCountByName.set(item.name, (distinctCountByName.get(item.name) || 0) + 1)
+    }
+
+    const rawCountByName = new Map(events.map((e) => [e.name, e._count._all]))
+
+    const visitors = rawCountByName.get('visitor') ?? 0
+    const signups = distinctCountByName.get('signup') ?? rawCountByName.get('signup') ?? 0
+    const activations = distinctCountByName.get('activation') ?? rawCountByName.get('activation') ?? 0
+    const trials = distinctCountByName.get('trial_started') ?? rawCountByName.get('trial_started') ?? 0
+    const paid = distinctCountByName.get('subscription_created') ?? rawCountByName.get('subscription_created') ?? 0
 
     const safePct = (n: number) => (visitors > 0 ? (n / visitors) * 100 : 0)
 
@@ -123,5 +141,26 @@ export const analyticsService = {
       }))
 
     return { distribution, topAtRisk }
+  },
+
+  // Churn reason breakdown and total MRR lost
+  async getChurnBreakdown(companyId: string) {
+    const events = await prisma.churnEvent.groupBy({
+      by: ['reason'],
+      where: { company_id: companyId },
+      _count: { _all: true },
+      _sum: { mrr_lost_cents: true },
+    })
+
+    const totalLostCents = events.reduce((acc, e) => acc + (e._sum.mrr_lost_cents || 0), 0)
+
+    const reasons = events.map((e) => ({
+      reason: e.reason || 'unspecified',
+      count: e._count._all,
+      mrrLostCents: e._sum.mrr_lost_cents || 0,
+      percentage: totalLostCents > 0 ? Math.round(((e._sum.mrr_lost_cents || 0) / totalLostCents) * 100) : 0,
+    }))
+
+    return { totalLostCents, reasons }
   },
 }

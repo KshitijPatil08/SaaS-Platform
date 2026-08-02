@@ -24,10 +24,10 @@ export interface LoginResult {
 const ACCESS_MAX_AGE = 15 * 60 * 1000
 const REFRESH_MAX_AGE = 7 * 24 * 60 * 60 * 1000
 
-function issueTokens(companyId: string): AuthTokens {
+function issueTokens(companyId: string, adminEmail?: string): AuthTokens {
   return {
-    accessToken: jwt.sign({ companyId }, JWT_SECRET, { expiresIn: '15m' }),
-    refreshToken: jwt.sign({ companyId }, JWT_REFRESH_SECRET, { expiresIn: '7d' }),
+    accessToken: jwt.sign({ companyId, adminEmail }, JWT_SECRET, { expiresIn: '15m' }),
+    refreshToken: jwt.sign({ companyId, adminEmail }, JWT_REFRESH_SECRET, { expiresIn: '7d' }),
   }
 }
 
@@ -74,7 +74,7 @@ export const authService = {
 
     return {
       success: true,
-      tokens: issueTokens(admin.company_id),
+      tokens: issueTokens(admin.company_id, admin.email),
       companyId: admin.company_id,
       adminEmail: admin.email,
     }
@@ -218,8 +218,59 @@ export const authService = {
         admins: { create: { email: input.email, password_hash } },
       },
     })
-    const tokens = issueTokens(company.id)
+    const tokens = issueTokens(company.id, input.email)
     return { success: true, companyId: company.id, tokens }
+  },
+
+  async forgotPassword(email: string) {
+    const admin = await prisma.adminUser.findFirst({ where: { email } })
+    if (!admin) {
+      return { success: true, message: 'If that email is registered, reset instructions have been generated.' }
+    }
+
+    const token = Math.random().toString(36).substring(2) + Date.now().toString(36)
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hour
+
+    await (prisma as any).passwordResetToken.create({
+      data: {
+        token,
+        admin_id: admin.id,
+        expires_at: expiresAt,
+      },
+    })
+
+    const resetUrl = `${config.clientOrigin}/reset-password?token=${token}`
+
+    return {
+      success: true,
+      message: 'Password reset link created.',
+      resetUrl: config.isProduction ? undefined : resetUrl,
+    }
+  },
+
+  async resetPassword(token: string, newPassword: string) {
+    const record = await (prisma as any).passwordResetToken.findUnique({
+      where: { token },
+      include: { admin: true },
+    })
+
+    if (!record || record.used || record.expires_at < new Date()) {
+      throw new Error('Invalid or expired password reset token')
+    }
+
+    const password_hash = await bcrypt.hash(newPassword, 12)
+
+    await prisma.adminUser.update({
+      where: { id: record.admin_id },
+      data: { password_hash },
+    })
+
+    await (prisma as any).passwordResetToken.update({
+      where: { id: record.id },
+      data: { used: true },
+    })
+
+    return { success: true, message: 'Password has been reset successfully' }
   },
 
   issueTokens,

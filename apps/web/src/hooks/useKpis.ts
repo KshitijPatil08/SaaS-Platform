@@ -150,6 +150,44 @@ export interface BillingStatus {
   hasActiveSubscription: boolean
 }
 
+export interface CustomerEvent {
+  id: string
+  name: string
+  properties: string
+  occurred_at: string
+}
+
+export function useAccountEvents(id: string | null) {
+  return useQuery<CustomerEvent[]>({
+    queryKey: ['account-events', id],
+    queryFn: async () => {
+      const { data } = await api.get(`/api/accounts/${id}/events`)
+      return data
+    },
+    enabled: !!id,
+  })
+}
+
+export interface ChurnBreakdown {
+  totalLostCents: number
+  reasons: Array<{
+    reason: string
+    count: number
+    mrrLostCents: number
+    percentage: number
+  }>
+}
+
+export function useChurnBreakdown() {
+  return useQuery<ChurnBreakdown>({
+    queryKey: ['churn-breakdown'],
+    queryFn: async () => {
+      const { data } = await api.get('/api/churn')
+      return data
+    },
+  })
+}
+
 export function useBillingStatus() {
   return useQuery<BillingStatus>({
     queryKey: ['billing-status'],
@@ -157,7 +195,7 @@ export function useBillingStatus() {
       const { data } = await api.get('/api/vendor-billing/status')
       return data
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes — avoids firing on every page navigation
+    staleTime: 5 * 60 * 1000,
     retry: false,
   })
 }

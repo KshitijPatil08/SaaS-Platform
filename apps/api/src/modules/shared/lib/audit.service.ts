@@ -70,21 +70,34 @@ export const auditService = {
     }
   },
 
-  async getLogs(companyId: string, limit = 50) {
+  async getLogs(companyId: string, limit = 50, page = 1) {
     const client = prisma as any
-    const logs: AuditLogRecord[] = await client.auditLog.findMany({
-      where: { company_id: companyId },
-      orderBy: { created_at: 'desc' },
-      take: limit,
-    })
-    return logs.map((l: AuditLogRecord) => ({
-      id: l.id,
-      email: l.user_email,
-      action: l.action,
-      ip: l.ip_address || '127.0.0.1',
-      userAgent: l.user_agent || 'unknown',
-      details: l.details,
-      createdAt: l.created_at,
-    }))
+    const skip = (page - 1) * limit
+    const [logs, total]: [AuditLogRecord[], number] = await Promise.all([
+      client.auditLog.findMany({
+        where: { company_id: companyId },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip,
+      }),
+      client.auditLog.count({ where: { company_id: companyId } }),
+    ])
+    return {
+      logs: logs.map((l: AuditLogRecord) => ({
+        id: l.id,
+        email: l.user_email,
+        action: l.action,
+        ip: l.ip_address || '127.0.0.1',
+        userAgent: l.user_agent || 'unknown',
+        details: l.details,
+        createdAt: l.created_at,
+      })),
+      pagination: {
+        page,
+        pageSize: limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    }
   },
 }

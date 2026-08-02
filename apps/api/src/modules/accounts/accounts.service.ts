@@ -55,4 +55,12 @@ export const accountsService = {
       },
     }
   },
+
+  async getEvents(customerId: string, companyId: string, limit = 50) {
+    return prisma.event.findMany({
+      where: { customer_id: customerId, company_id: companyId },
+      orderBy: { occurred_at: 'desc' },
+      take: limit,
+    })
+  },
 }

@@ -13,6 +13,7 @@ import HealthPage from './pages/HealthPage'
 import BillingPage from './pages/BillingPage'
 import LandingPage from './pages/LandingPage'
 import DocsPage from './pages/DocsPage'
+import { ThemeProvider } from './hooks/useTheme'
 
 import { Menu, BarChart3 } from 'lucide-react'
 
@@ -30,7 +31,7 @@ function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
 
   return (
-    <div className="flex min-h-screen relative bg-slate-900">
+    <div className="flex min-h-screen relative bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200">
       {/* Mobile Backdrop Overlay */}
       {sidebarOpen && (
         <div
@@ -43,9 +44,9 @@ function AppLayout() {
       <SideNav open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col md:ml-64 min-w-0 bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900 min-h-screen">
+      <div className="flex-1 flex flex-col md:ml-64 min-w-0 bg-slate-50 dark:bg-slate-950 min-h-screen transition-colors duration-200">
         {/* Mobile Header Bar */}
-        <header className="md:hidden flex items-center justify-between px-4 py-3 bg-slate-900 text-slate-100 border-b border-slate-800 sticky top-0 z-20">
+        <header className="md:hidden flex items-center justify-between px-4 py-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-20">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
               <BarChart3 className="h-4 w-4 text-white" />
@@ -80,18 +81,20 @@ function AppLayout() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <AuthRedirect />
-        <Routes>
-          <Route path="/welcome" element={<LandingPage />} />
-          <Route path="/docs" element={<DocsPage />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/*" element={<AppLayout />} />
-        </Routes>
-      </Router>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <AuthRedirect />
+          <Routes>
+            <Route path="/welcome" element={<LandingPage />} />
+            <Route path="/docs" element={<DocsPage />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/*" element={<AppLayout />} />
+          </Routes>
+        </Router>
+      </QueryClientProvider>
+    </ThemeProvider>
   )
 }
 

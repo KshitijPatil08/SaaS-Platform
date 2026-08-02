@@ -103,7 +103,7 @@ router.post('/reset-lockout', verifyJwt, async (req: Request, res: Response) => 
   if (req.companyId) {
     await auditService.log({
       companyId: req.companyId,
-      userEmail: 'admin@pulse.example',
+      userEmail: req.adminEmail || 'admin@pulse.example',
       action: 'RESET_LOCKOUT',
       req,
     })
@@ -150,7 +150,7 @@ router.post('/demo', async (req: Request, res: Response) => {
     })
 
     if (admin) {
-      const tokens = authService.issueTokens(admin.company_id)
+      const tokens = authService.issueTokens(admin.company_id, admin.email)
       setAuthCookies(res, tokens)
       await auditService.log({
         companyId: admin.company_id,
@@ -216,6 +216,31 @@ router.put('/profile', verifyJwt, async (req: Request, res: Response) => {
       req,
     })
     return res.json(updated)
+  } catch (e) {
+    return res.status(400).json({ error: (e as Error).message })
+  }
+})
+
+// POST /api/auth/forgot-password (public)
+router.post('/forgot-password', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body
+    if (!email) return res.status(400).json({ error: 'Email is required' })
+    const result = await authService.forgotPassword(email)
+    return res.json(result)
+  } catch (e) {
+    return res.status(500).json({ error: 'Could not process password reset request' })
+  }
+})
+
+// POST /api/auth/reset-password (public)
+router.post('/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { token, newPassword } = req.body
+    if (!token || !newPassword) return res.status(400).json({ error: 'Token and newPassword are required' })
+    if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' })
+    const result = await authService.resetPassword(token, newPassword)
+    return res.json(result)
   } catch (e) {
     return res.status(400).json({ error: (e as Error).message })
   }

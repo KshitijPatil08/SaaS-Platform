@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useHealth, useKpis } from '../hooks/useKpis'
+import { useHealth, useKpis, useChurnBreakdown } from '../hooks/useKpis'
 import RetentionRing from '../components/RetentionRing'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -293,11 +293,71 @@ const HealthPage: React.FC = () => {
                 to="/accounts?status=past_due"
                 className="text-xs text-purple-600 dark:text-purple-400 font-medium hover:underline"
               >
-                View all past-due accounts →
+                View all past-due accounts &rarr;
               </Link>
             </div>
           )}
         </div>
+
+        {/* Churn Reason Breakdown */}
+        <ChurnBreakdownSection />
+      </div>
+    </div>
+  )
+}
+
+function ChurnBreakdownSection() {
+  const { data: churn, isLoading } = useChurnBreakdown()
+
+  if (isLoading) {
+    return (
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-6 animate-pulse">
+        <div className="h-4 w-40 bg-slate-200 dark:bg-slate-700 rounded mb-4" />
+        <div className="space-y-2">
+          {[1, 2, 3].map(i => <div key={i} className="h-10 bg-slate-100 dark:bg-slate-700/40 rounded-xl" />)}
+        </div>
+      </div>
+    )
+  }
+
+  if (!churn?.reasons?.length) {
+    return (
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-6 text-center text-slate-400">
+        <p className="text-2xl mb-2">🎉</p>
+        <p className="text-sm font-semibold">No churn events recorded</p>
+        <p className="text-xs mt-1">Churn reasons will appear here when customers cancel.</p>
+      </div>
+    )
+  }
+
+  const fmtUsd = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-bold text-slate-900 dark:text-slate-100">Churn Reason Breakdown</p>
+          <p className="text-xs text-slate-400 mt-0.5">Total lost MRR: <span className="font-semibold text-rose-500">{fmtUsd(churn.totalLostCents)}/mo</span></p>
+        </div>
+      </div>
+      <div className="divide-y divide-slate-50 dark:divide-slate-700/60">
+        {churn.reasons.map((r) => (
+          <div key={r.reason} className="px-5 py-3.5 flex items-center gap-4">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-100 capitalize">{r.reason.replace(/_/g, ' ')}</p>
+              <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-rose-500 transition-all duration-700"
+                  style={{ width: `${r.percentage}%` }}
+                />
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-xs font-bold text-rose-500">{fmtUsd(r.mrrLostCents)}/mo</p>
+              <p className="text-[11px] text-slate-400">{r.count} {r.count === 1 ? 'account' : 'accounts'} · {r.percentage}%</p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

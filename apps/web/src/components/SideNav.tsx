@@ -3,10 +3,11 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Filter, Activity,
   Settings as SettingsIcon, LogOut, BarChart3, CreditCard,
-  Zap, TrendingUp, Sparkles, Crown, X
+  Zap, TrendingUp, Sparkles, Crown, X, Sun, Moon
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { useBillingStatus } from '../hooks/useKpis'
+import { useTheme } from '../hooks/useTheme'
 
 interface NavItem {
   label: string
@@ -65,8 +66,8 @@ interface SideNavProps {
 
 const SideNav: React.FC<SideNavProps> = ({ open = false, onClose }) => {
   const navigate = useNavigate()
-  // Fix #15: use cached useBillingStatus query instead of uncached api.get on every mount
   const { data: billing } = useBillingStatus()
+  const { theme, toggleTheme } = useTheme()
   const plan = (billing?.plan as PlanTier) ?? null
   const usagePct = billing?.usagePct ?? 0
 
@@ -81,7 +82,7 @@ const SideNav: React.FC<SideNavProps> = ({ open = false, onClose }) => {
 
   return (
     <nav
-      className={`fixed left-0 top-0 w-64 h-full bg-gradient-to-b from-slate-900 via-slate-950 to-black text-slate-100 z-40 shadow-2xl flex flex-col transition-transform duration-300 md:translate-x-0 ${
+      className={`fixed left-0 top-0 w-64 h-full bg-slate-900 dark:bg-slate-950 text-slate-100 border-r border-slate-800/80 z-40 shadow-2xl flex flex-col transition-transform duration-300 md:translate-x-0 ${
         open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}
     >
@@ -168,14 +169,36 @@ const SideNav: React.FC<SideNavProps> = ({ open = false, onClose }) => {
         </div>
       )}
 
-      {/* Logout */}
-      <div className="px-3 pb-4 pt-1 border-t border-slate-800/60">
+      {/* Theme Toggle & Logout */}
+      <div className="px-3 pb-4 pt-1 border-t border-slate-800/60 space-y-1">
+        <button
+          onClick={toggleTheme}
+          className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all duration-150 group"
+          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
+          <div className="flex items-center gap-3">
+            {theme === 'dark' ? (
+              <Moon className="h-4 w-4 text-purple-400 group-hover:scale-110 transition-transform" />
+            ) : (
+              <Sun className="h-4 w-4 text-amber-400 group-hover:scale-110 transition-transform" />
+            )}
+            <span className="text-xs font-semibold">{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>
+          </div>
+          <div
+            className={`w-9 h-5 rounded-full p-0.5 transition-colors flex items-center ${
+              theme === 'dark' ? 'bg-purple-600 justify-end' : 'bg-slate-700 justify-start'
+            }`}
+          >
+            <span className="w-4 h-4 rounded-full bg-white shadow-md transform transition-transform" />
+          </div>
+        </button>
+
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-150 group"
+          className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-150 group"
         >
           <LogOut className="h-4 w-4 opacity-80 group-hover:opacity-100" />
-          <span>Sign Out</span>
+          <span className="text-xs font-semibold">Sign Out</span>
         </button>
       </div>
     </nav>

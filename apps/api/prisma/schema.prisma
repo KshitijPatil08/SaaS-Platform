@@ -22,13 +22,13 @@ model Company {
   vendor_subscription_id     String?  @unique           // active Stripe subscription ID
   plan_expires_at            DateTime?                  // null = active / no expiry
 
-  customers   Customer[]
-  events      Event[]
+  customers     Customer[]
+  events        Event[]
   mrr_snapshots MRRSnapshot[]
   churn_events  ChurnEvent[]
   health_scores HealthScore[]
-  admins      AdminUser[]
-  audit_logs  AuditLog[]
+  admins        AdminUser[]
+  audit_logs    AuditLog[]
 }
 
 
@@ -42,15 +42,35 @@ model AdminUser {
   mfa_enabled     Boolean  @default(false)
   created_at      DateTime @default(now())
 
+  reset_tokens    PasswordResetToken[]
+
   @@unique([company_id, email])
   @@index([email])
+}
+
+// ─── Password Reset ───────────────────────────────────────────────────────────
+// Stores short-lived one-time tokens for the forgot-password flow.
+// In dev: the reset URL is returned directly in the API response.
+// In production: configure SMTP_* env vars to email the link.
+
+model PasswordResetToken {
+  id         String    @id @default(uuid())
+  token      String    @unique
+  admin_id   String
+  admin      AdminUser @relation(fields: [admin_id], references: [id])
+  expires_at DateTime
+  used       Boolean   @default(false)
+  created_at DateTime  @default(now())
+
+  @@index([token])
+  @@index([admin_id])
 }
 
 model Customer {
   id               String   @id @default(uuid())
   company_id       String
   company          Company  @relation(fields: [company_id], references: [id])
-  external_id      String?  @unique  // e.g., Stripe customer_id
+  external_id      String?  // e.g., Stripe customer_id — unique per company, not globally
   email            String
   name             String
   plan             String
@@ -65,6 +85,7 @@ model Customer {
   health_scores  HealthScore[]
   churn_events   ChurnEvent[]
 
+  @@unique([company_id, external_id])   // Fix: was incorrectly global @unique
   @@index([company_id])
   @@index([status])
 }
@@ -123,7 +144,7 @@ model HealthScore {
   customer_id String
   customer   Customer @relation(fields: [customer_id], references: [id])
   score      Int
-  signals    String   @default("{}")
+  signals    String   @default("{}")  // JSON: { payment_status, trial_age_days, mrr_trend, account_age_days }
   computed_at DateTime @default(now())
 
   @@unique([company_id, customer_id, computed_at])

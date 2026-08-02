@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { api } from '../lib/api'
-import { Copy, Check, ShieldCheck, Key, Building, Link as LinkIcon, RefreshCw, LogOut, User, AlertCircle, History, Gauge, Unlock, UserPlus, Users } from 'lucide-react'
+import { Copy, Check, ShieldCheck, Key, Building, Link as LinkIcon, RefreshCw, LogOut, User, AlertCircle, History, Gauge, Unlock, UserPlus, Users, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 
@@ -55,9 +55,13 @@ const Settings: React.FC = () => {
 
   // Audit Logs & Lockout state
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
+  const [auditPage, setAuditPage] = useState(1)
+  const [auditTotalPages, setAuditTotalPages] = useState(1)
+  const [auditTotal, setAuditTotal] = useState(0)
   const [lockout, setLockout] = useState<LockoutStatus | null>(null)
   const [logsLoading, setLogsLoading] = useState(false)
   const [resettingLockout, setResettingLockout] = useState(false)
+  const [exportType, setExportType] = useState<'mrr' | 'customers' | 'churn'>('mrr')
 
   // Form states
   const [companyName, setCompanyName] = useState('')
@@ -116,14 +120,23 @@ const Settings: React.FC = () => {
     }
   }
 
-  const fetchAuditData = async () => {
+  const fetchAuditData = async (page = 1) => {
     setLogsLoading(true)
     try {
       const [logsRes, lockoutRes] = await Promise.all([
-        api.get('/api/audit-logs'),
+        api.get(`/api/audit-logs?page=${page}&pageSize=10`),
         api.get('/api/auth/lockout-status'),
       ])
-      setAuditLogs(logsRes.data)
+      // New API returns { logs, pagination } — handle both shapes for safety
+      const data = logsRes.data
+      if (data?.logs) {
+        setAuditLogs(data.logs)
+        setAuditTotalPages(data.pagination?.totalPages ?? 1)
+        setAuditTotal(data.pagination?.total ?? 0)
+      } else {
+        setAuditLogs(Array.isArray(data) ? data : [])
+      }
+      setAuditPage(page)
       setLockout(lockoutRes.data)
     } catch {
       /* ignore non-critical audit fetch failures */
@@ -676,18 +689,21 @@ const Settings: React.FC = () => {
             </div>
           </section>
 
-          {/* Audit Trail - Fix #11: added max-h-80 overflow-y-auto */}
+          {/* Audit Trail - paginated */}
           <section className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-700">
               <div className="flex items-center gap-2.5">
                 <History className="h-5 w-5 text-purple-500" />
                 <div>
                   <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Security Audit Log</h2>
-                  <p className="text-xs text-slate-400">Timestamped record of logins, data exports, and administrative actions</p>
+                  <p className="text-xs text-slate-400">
+                    Timestamped record of logins, exports, and admin actions
+                    {auditTotal > 0 && <span className="ml-1 text-purple-500 font-semibold">({auditTotal} total)</span>}
+                  </p>
                 </div>
               </div>
               <button
-                onClick={fetchAuditData}
+                onClick={() => fetchAuditData(auditPage)}
                 disabled={logsLoading}
                 className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
                 title="Refresh audit logs"
@@ -696,7 +712,7 @@ const Settings: React.FC = () => {
               </button>
             </div>
 
-            <div className="overflow-x-auto max-h-80 overflow-y-auto">
+            <div className="overflow-x-auto max-h-96 overflow-y-auto">
               <table className="w-full text-left text-xs">
                 <thead className="sticky top-0 bg-white dark:bg-slate-800 shadow-sm z-10">
                   <tr className="border-b border-slate-100 dark:border-slate-700 text-slate-400 uppercase tracking-wider text-[10px]">
@@ -707,7 +723,7 @@ const Settings: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-                  {auditLogs.slice(0, 50).map((log) => (
+                  {auditLogs.map((log) => (
                     <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
                       <td className="py-2.5 px-3 font-mono text-slate-500 dark:text-slate-400">
                         {new Date(log.createdAt).toLocaleString()}
@@ -728,43 +744,141 @@ const Settings: React.FC = () => {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {auditTotalPages > 1 && (
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-700">
+                <p className="text-xs text-slate-400">
+                  Page {auditPage} of {auditTotalPages}
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => fetchAuditData(auditPage - 1)}
+                    disabled={auditPage <= 1 || logsLoading}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  {Array.from({ length: Math.min(auditTotalPages, 5) }, (_, i) => {
+                    const p = i + 1
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => fetchAuditData(p)}
+                        className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
+                          p === auditPage
+                            ? 'bg-purple-600 text-white'
+                            : 'border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  })}
+                  <button
+                    onClick={() => fetchAuditData(auditPage + 1)}
+                    disabled={auditPage >= auditTotalPages || logsLoading}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
         </motion.div>
       )}
 
       {/* Section 4: Webhooks & Integrations */}
       {activeTab === 'integrations' && (
-        <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
-          <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100 dark:border-slate-700">
-            <LinkIcon className="h-5 w-5 text-purple-500" />
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Stripe Webhook Integration</h2>
-              <p className="text-xs text-slate-400">Configure this URL in Stripe Dashboard &gt; Developers &gt; Webhooks</p>
+        <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+          {/* Export Card */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
+            <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100 dark:border-slate-700">
+              <Download className="h-5 w-5 text-purple-500" />
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Data Export</h2>
+                <p className="text-xs text-slate-400">Download your data as CSV or JSON for analysis in Excel, Google Sheets, or BI tools</p>
+              </div>
+            </div>
+
+            {/* Export Type Selector */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">What to export</p>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { key: 'mrr' as const, label: 'MRR Snapshots', desc: 'Monthly revenue history', icon: '📈' },
+                  { key: 'customers' as const, label: 'Customers', desc: 'Full customer list with plan & status', icon: '👥' },
+                  { key: 'churn' as const, label: 'Churn Events', desc: 'Cancellations with reasons & MRR lost', icon: '📉' },
+                ]).map(opt => (
+                  <button
+                    key={opt.key}
+                    onClick={() => setExportType(opt.key)}
+                    className={`p-3.5 rounded-xl border text-left transition-all ${
+                      exportType === opt.key
+                        ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/40 ring-1 ring-purple-500/40'
+                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                    }`}
+                  >
+                    <span className="text-xl block mb-1.5">{opt.icon}</span>
+                    <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{opt.label}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{opt.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <a
+                href={`http://localhost:5000/api/export?format=csv&type=${exportType}&range=last_12_months`}
+                download
+                className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 transition-colors shadow-md shadow-purple-500/20"
+              >
+                <Download className="h-3.5 w-3.5" /> Download CSV
+              </a>
+              <a
+                href={`http://localhost:5000/api/export?format=json&type=${exportType}&range=last_12_months`}
+                download
+                className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+              >
+                <Download className="h-3.5 w-3.5" /> Download JSON
+              </a>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              readOnly
-              value={profile.webhookUrl || ''}
-              className="flex-1 px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-slate-700 dark:text-slate-300"
-            />
-            <button
-              type="button"
-              onClick={() => copyToClipboard(profile.webhookUrl || '')}
-              className="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition-colors flex items-center gap-1.5 shrink-0"
-            >
-              {copied ? (
-                <>
-                  <Check className="h-3.5 w-3.5" /> Copied
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5" /> Copy URL
-                </>
-              )}
-            </button>
+          {/* Webhook Card */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
+            <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100 dark:border-slate-700">
+              <LinkIcon className="h-5 w-5 text-purple-500" />
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Stripe Webhook Integration</h2>
+                <p className="text-xs text-slate-400">Configure this URL in Stripe Dashboard &gt; Developers &gt; Webhooks</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={profile.webhookUrl || ''}
+                className="flex-1 px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-slate-700 dark:text-slate-300"
+              />
+              <button
+                type="button"
+                onClick={() => copyToClipboard(profile.webhookUrl || '')}
+                className="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition-colors flex items-center gap-1.5 shrink-0"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" /> Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" /> Copy URL
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </motion.section>
       )}

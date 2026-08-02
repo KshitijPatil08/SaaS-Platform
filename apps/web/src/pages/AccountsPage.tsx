@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useAccounts, Account } from '../hooks/useKpis'
+import { useAccounts, Account, useAccountEvents } from '../hooks/useKpis'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CheckCircle, AlertCircle, Clock, XCircle, Search, X,
@@ -62,9 +62,22 @@ interface AccountDetailPanelProps {
 }
 
 const AccountDetailPanel: React.FC<AccountDetailPanelProps> = ({ account, colorIdx, onClose }) => {
+  const [activeTab, setActiveTab] = React.useState<'overview' | 'activity'>('overview')
+  const { data: events, isLoading: eventsLoading } = useAccountEvents(account?.id ?? null)
   const sc = account ? (statusConfig[account.status as Status] ?? statusConfig.active) : null
   const pc = account ? (planColor[account.plan as Plan] ?? planColor.starter) : null
   const initials = account ? account.name.split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase() : ''
+
+  // Reset tab when switching accounts
+  React.useEffect(() => { setActiveTab('overview') }, [account?.id])
+
+  // Close on Escape key
+  React.useEffect(() => {
+    if (!account) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [account, onClose])
 
   return (
     <AnimatePresence>
@@ -89,72 +102,96 @@ const AccountDetailPanel: React.FC<AccountDetailPanelProps> = ({ account, colorI
             className="fixed right-0 top-0 h-full w-full max-w-sm bg-white dark:bg-slate-900 shadow-2xl z-50 flex flex-col border-l border-slate-200 dark:border-slate-700"
           >
             {/* Header */}
-            <div className="flex items-start justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-700">
-              <div className="flex items-center gap-3">
-                <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${AVATAR_COLORS[colorIdx % AVATAR_COLORS.length]} flex items-center justify-center text-white font-bold text-sm shrink-0`}>
-                  {initials}
+            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${AVATAR_COLORS[colorIdx % AVATAR_COLORS.length]} flex items-center justify-center text-white font-bold text-sm shrink-0`}>
+                    {initials}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 dark:text-slate-100 truncate">{account.name}</p>
+                    <p className="text-xs text-slate-400 truncate">{account.email}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="font-bold text-slate-900 dark:text-slate-100 truncate">{account.name}</p>
-                  <p className="text-xs text-slate-400 truncate">{account.email}</p>
-                </div>
+                <button
+                  onClick={onClose}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0 ml-2"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <button
-                onClick={onClose}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0 ml-2"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              {/* Tab Selector */}
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mt-4 gap-1">
+                <button onClick={() => setActiveTab('overview')} className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${activeTab === 'overview' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}>Overview</button>
+                <button onClick={() => setActiveTab('activity')} className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${activeTab === 'activity' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}>Activity</button>
+              </div>
             </div>
 
             {/* Body */}
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-              {/* Status + Plan badges */}
-              <div className="flex gap-2 flex-wrap">
-                {sc && (
-                  <span className={clsx('inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full', sc.color)}>
-                    {sc.icon} {sc.label}
-                  </span>
-                )}
-                {pc && (
-                  <span className={clsx('inline-flex px-3 py-1 text-xs font-semibold rounded-full capitalize', pc)}>
-                    {account.plan} Plan
-                  </span>
-                )}
-              </div>
-
-              {/* Key metrics */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3.5">
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-1">Monthly Revenue</p>
-                  <p className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tabular-nums">{formatMRR(account.mrr_cents)}</p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3.5">
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-1">Billing Cycle</p>
-                  <p className="text-xl font-extrabold text-slate-900 dark:text-slate-100 capitalize">{account.billing_cycle || '—'}</p>
-                </div>
-              </div>
-
-              {/* Account Details */}
-              <div className="space-y-1">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Account Details</p>
-                <div className="bg-white dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-700 divide-y divide-slate-50 dark:divide-slate-700/60">
-                  <DetailRow icon={<Mail className="h-3.5 w-3.5" />} label="Email" value={account.email} />
-                  <DetailRow icon={<Building2 className="h-3.5 w-3.5" />} label="Account Name" value={account.name} />
-                  <DetailRow icon={<Tag className="h-3.5 w-3.5" />} label="External ID" value={account.external_id || '—'} />
-                  <DetailRow icon={<Calendar className="h-3.5 w-3.5" />} label="Joined" value={new Date(account.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} />
-                  {account.trial_ends_at && (
-                    <DetailRow
-                      icon={<Clock className="h-3.5 w-3.5" />}
-                      label="Trial Ends"
-                      value={new Date(account.trial_ends_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                    />
+              {activeTab === 'overview' ? (
+                <>
+                  <div className="flex gap-2 flex-wrap">
+                    {sc && <span className={clsx('inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full', sc.color)}>{sc.icon} {sc.label}</span>}
+                    {pc && <span className={clsx('inline-flex px-3 py-1 text-xs font-semibold rounded-full capitalize', pc)}>{account.plan} Plan</span>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3.5">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-1">Monthly Revenue</p>
+                      <p className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tabular-nums">{formatMRR(account.mrr_cents)}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3.5">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-1">Billing Cycle</p>
+                      <p className="text-xl font-extrabold text-slate-900 dark:text-slate-100 capitalize">{account.billing_cycle || '—'}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Account Details</p>
+                    <div className="bg-white dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-700 divide-y divide-slate-50 dark:divide-slate-700/60">
+                      <DetailRow icon={<Mail className="h-3.5 w-3.5" />} label="Email" value={account.email} />
+                      <DetailRow icon={<Building2 className="h-3.5 w-3.5" />} label="Account Name" value={account.name} />
+                      <DetailRow icon={<Tag className="h-3.5 w-3.5" />} label="External ID" value={account.external_id || '—'} />
+                      <DetailRow icon={<Calendar className="h-3.5 w-3.5" />} label="Joined" value={new Date(account.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} />
+                      {account.trial_ends_at && (
+                        <DetailRow icon={<Clock className="h-3.5 w-3.5" />} label="Trial Ends" value={new Date(account.trial_ends_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} />
+                      )}
+                    </div>
+                  </div>
+                  <StatusExplanation status={account.status as Status} trialEndsAt={account.trial_ends_at} />
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Recent Activity</p>
+                  {eventsLoading ? (
+                    <div className="space-y-3 animate-pulse">
+                      {[1,2,3,4].map(i => (
+                        <div key={i} className="flex gap-3 items-center">
+                          <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700" />
+                          <div className="flex-1 space-y-1">
+                            <div className="h-3 w-28 bg-slate-200 dark:bg-slate-700 rounded" />
+                            <div className="h-2 w-20 bg-slate-100 dark:bg-slate-700/60 rounded" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : !events?.length ? (
+                    <div className="py-12 text-center space-y-2 text-slate-400">
+                      <Activity className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-600" />
+                      <p className="text-xs font-medium">No recorded events yet</p>
+                    </div>
+                  ) : (
+                    <div className="relative border-l-2 border-slate-100 dark:border-slate-700 ml-3 space-y-4">
+                      {events.map((evt) => (
+                        <div key={evt.id} className="relative pl-5">
+                          <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-purple-100 dark:bg-purple-900/50 border-2 border-purple-500" />
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-100 capitalize">{evt.name.replace(/_/g, ' ')}</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">{new Date(evt.occurred_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
-              </div>
-
-              {/* Status explanation */}
-              <StatusExplanation status={account.status as Status} trialEndsAt={account.trial_ends_at} />
+              )}
             </div>
 
             {/* Footer actions */}

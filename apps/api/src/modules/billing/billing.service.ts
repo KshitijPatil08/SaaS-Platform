@@ -37,11 +37,22 @@ export const billingService = {
     currentPeriodEnd: number
     canceledAt: number | null
   }) {
+    // Look up the customer by external_id first (now compound unique, not globally unique)
+    const customer = await prisma.customer.findFirst({
+      where: { external_id: sub.customerId },
+      select: { id: true },
+    })
+
+    if (!customer) {
+      console.warn(`[billingService] Customer not found for external_id: ${sub.customerId}`)
+      return null
+    }
+
     return prisma.subscription.upsert({
       where: { stripe_subscription_id: sub.id },
       create: {
         stripe_subscription_id: sub.id,
-        customer: { connect: { external_id: sub.customerId } },
+        customer: { connect: { id: customer.id } },
         plan: sub.plan,
         mrr_cents: sub.mrrCents,
         status: sub.status,
@@ -115,6 +126,26 @@ export const billingService = {
         churned_mrr_cents: snapshot.churnedMrrCents ?? 0,
         customer_count: snapshot.customerCount ?? 0,
       },
+    })
+  },
+
+  // Aggregates total active MRR and customer count for company, then records snapshot
+  async snapshotCurrentMrr(companyId: string) {
+    const activeCustomers = await prisma.customer.findMany({
+      where: {
+        company_id: companyId,
+        status: { in: ['active', 'trialing', 'past_due'] },
+      },
+      select: { mrr_cents: true },
+    })
+
+    const totalMrrCents = activeCustomers.reduce((acc, c) => acc + (c.mrr_cents || 0), 0)
+    const customerCount = activeCustomers.length
+
+    return this.upsertSnapshot(companyId, {
+      date: new Date(),
+      mrrCents: totalMrrCents,
+      customerCount,
     })
   },
 }

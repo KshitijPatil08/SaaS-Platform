@@ -18,6 +18,17 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- ⚡ Anti-flash: apply saved theme before React boots to prevent white/dark flicker -->
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('pulse_theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var theme = (saved === 'dark' || saved === 'light') ? saved : (prefersDark ? 'dark' : 'light');
+          if (theme === 'dark') document.documentElement.classList.add('dark');
+        } catch(e) {}
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
