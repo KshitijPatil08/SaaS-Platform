@@ -24,6 +24,8 @@ export interface MrrPoint {
   date: string
   mrr: number
   newMrr: number
+  expansionMrr: number
+  contractionMrr: number
   churnedMrr: number
   customerCount: number
 }

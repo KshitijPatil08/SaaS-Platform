@@ -118,6 +118,12 @@ import mrrGoalRouter from './modules/analytics/mrr-goal.routes'
 import customerNotesRouter from './modules/accounts/customer-notes.routes'
 import savedSegmentsRouter from './modules/accounts/saved-segments.routes'
 import statusRouter from './modules/shared/status.routes'
+import { apiKeyMiddleware } from './modules/api-keys/api-key.middleware'
+
+// ─── Global API Key bearer token auth (runs before JWT check) ──────────────────
+// If request has Authorization: Bearer pulse_live_xxx, apiKeyMiddleware validates
+// it and sets req.companyId so all protected routes below work transparently.
+app.use(apiKeyMiddleware)
 
 // Auth routes (public)
 app.use('/api/auth', authRouter)

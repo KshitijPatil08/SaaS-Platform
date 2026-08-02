@@ -26,18 +26,48 @@ router.get('/summary', async (req: Request, res: Response) => {
     })
 
     const pastDueMrrCents = pastDueCustomers.reduce((acc, c) => acc + c.mrr_cents, 0)
-    // Calculate recovered MRR from customers restored to active within last 30 days
-    const recoveredMrrCents = Math.round(pastDueMrrCents * 1.8) + 49000 // Realistic recovered benchmark
+
+    // Real recovery tracking: find customers who had a payment_failed event (past_due)
+    // but are now active — meaning they recovered within the last 30 days.
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    // Count customers with a past_due→active recovery event in the last 30 days
+    // We approximate this by looking at customers currently active who had
+    // a payment_failed event in the recent window.
+    const recentRecoveries = await prisma.event.findMany({
+      where: {
+        company_id: companyId,
+        name: 'payment_recovered',
+        occurred_at: { gte: thirtyDaysAgo },
+      },
+      include: {
+        customer: { select: { mrr_cents: true, status: true } },
+      },
+    })
+
+    const recoveredMrrCents = recentRecoveries.reduce(
+      (acc, e) => acc + (e.customer?.mrr_cents ?? 0),
+      0
+    )
+
+    // Recovery rate: recovered / (recovered + still past_due)
+    const totalDunned = recentRecoveries.length + pastDueCustomers.length
+    const recoveryRatePct = totalDunned > 0
+      ? Math.round((recentRecoveries.length / totalDunned) * 1000) / 10
+      : pastDueCustomers.length === 0 ? 100 : 0
 
     return res.json({
       pastDueCount: pastDueCustomers.length,
       pastDueMrrCents,
       recoveredMrrCents,
-      recoveryRatePct: pastDueCustomers.length > 0 ? 68.4 : 100,
+      recoveryRatePct,
+      recoveredCount: recentRecoveries.length,
       accounts: pastDueCustomers,
     })
   } catch (err) {
     console.error('[dunning] Error fetching dunning summary:', err)
+
     return res.status(500).json({ error: 'Failed to fetch dunning summary' })
   }
 })
@@ -56,6 +86,17 @@ router.post('/recover', async (req: Request, res: Response) => {
     const updated = await prisma.customer.update({
       where: { id: customerId, company_id: companyId },
       data: { status: 'active' },
+    })
+
+    // Emit payment_recovered event for real dunning recovery tracking
+    await prisma.event.create({
+      data: {
+        company_id: companyId,
+        customer_id: customerId,
+        name: 'payment_recovered',
+        occurred_at: new Date(),
+        properties: JSON.stringify({ method: 'manual_recovery', mrr_cents: updated.mrr_cents }),
+      },
     })
 
     // Insert health score recovery event

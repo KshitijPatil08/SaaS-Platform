@@ -8,6 +8,8 @@ interface MRRData {
   mrr: number
   prevMRR: number
   newMRR: number
+  expansionMRR: number
+  contractionMRR: number
   churnedMRR: number
 }
 
@@ -28,6 +30,8 @@ const MRRChart: React.FC = () => {
       mrr: Math.round(p.mrr / 100),
       prevMRR: prevPoint ? Math.round(prevPoint.mrr / 100) : Math.round((p.mrr * 0.92) / 100),
       newMRR: Math.round((p.newMrr || 0) / 100),
+      expansionMRR: Math.round((p.expansionMrr || 0) / 100),
+      contractionMRR: Math.round((p.contractionMrr || 0) / 100),
       churnedMRR: Math.round((p.churnedMrr || 0) / 100),
     }
   })
@@ -142,10 +146,28 @@ const MRRChart: React.FC = () => {
           </div>
 
           {latest && (
-            <div className="flex items-center gap-4 text-xs font-medium">
-              <span className="text-blue-600 dark:text-blue-400">New: +${latest.newMRR.toLocaleString()}</span>
+            <div className="flex flex-wrap items-center gap-3 text-xs font-medium">
+              <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
+                New: +${latest.newMRR.toLocaleString()}
+              </span>
+              {latest.expansionMRR > 0 && (
+                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                  Expansion: +${latest.expansionMRR.toLocaleString()}
+                </span>
+              )}
+              {latest.contractionMRR > 0 && (
+                <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+                  Contraction: -${latest.contractionMRR.toLocaleString()}
+                </span>
+              )}
               {latest.churnedMRR > 0 && (
-                <span className="text-rose-500">Churned: -${latest.churnedMRR.toLocaleString()}</span>
+                <span className="flex items-center gap-1 text-rose-500">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
+                  Churned: -${latest.churnedMRR.toLocaleString()}
+                </span>
               )}
             </div>
           )}
@@ -167,6 +189,14 @@ const MRRChart: React.FC = () => {
             <linearGradient id="newMrrGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2} />
               <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="expansionGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#10B981" stopOpacity={0.2} />
+              <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="contractionGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.2} />
+              <stop offset="95%" stopColor="#F59E0B" stopOpacity={0} />
             </linearGradient>
             <linearGradient id="churnGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#F43F5E" stopOpacity={0.2} />
@@ -227,6 +257,28 @@ const MRRChart: React.FC = () => {
             fill="url(#newMrrGrad)"
             dot={false}
             activeDot={{ r: 4, fill: '#3B82F6', strokeWidth: 0 }}
+            animationDuration={1500}
+          />
+          <Area
+            type="monotone"
+            dataKey="expansionMRR"
+            name="Expansion MRR"
+            stroke="#10B981"
+            strokeWidth={1.5}
+            fill="url(#expansionGrad)"
+            dot={false}
+            activeDot={{ r: 4, fill: '#10B981', strokeWidth: 0 }}
+            animationDuration={1500}
+          />
+          <Area
+            type="monotone"
+            dataKey="contractionMRR"
+            name="Contraction MRR"
+            stroke="#F59E0B"
+            strokeWidth={1.5}
+            fill="url(#contractionGrad)"
+            dot={false}
+            activeDot={{ r: 4, fill: '#F59E0B', strokeWidth: 0 }}
             animationDuration={1500}
           />
           <Area

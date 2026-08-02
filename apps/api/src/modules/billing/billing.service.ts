@@ -4,8 +4,10 @@ export interface MrrPoint {
   date: Date
   mrr: number
   newMrr: number
+  expansionMrr: number   // upgrade revenue from existing customers
+  contractionMrr: number // downgrade revenue lost from existing customers
   churnedMrr: number
-  customerCount: number    // included so the frontend can compute customer MoM change
+  customerCount: number  // included so the frontend can compute customer MoM change
 }
 
 export const billingService = {
@@ -21,6 +23,8 @@ export const billingService = {
       date: s.date,
       mrr: s.mrr_cents,
       newMrr: s.new_mrr_cents,
+      expansionMrr: s.expansion_mrr_cents,
+      contractionMrr: s.contraction_mrr_cents,
       churnedMrr: s.churned_mrr_cents,
       customerCount: s.customer_count,
     }))

@@ -102,6 +102,53 @@ router.post('/', async (req, res) => {
         await triggerPostWebhookUpdates(customerId)
         break
       }
+      case 'invoice.payment_failed': {
+        // Most operationally critical event: a customer's payment has failed.
+        // Steps: mark past_due, recompute health (score will drop), emit event for dunning.
+        const invoice = event.data.object as Stripe.Invoice
+        const customerId = extractCustomerId(invoice.customer)
+        if (!customerId) break
+
+        // Mark customer as past_due
+        await prisma.customer.updateMany({
+          where: { external_id: customerId },
+          data: { status: 'past_due' },
+        })
+
+        // Find customer record for follow-up operations
+        const customer = await prisma.customer.findFirst({
+          where: { external_id: customerId },
+          select: { id: true, company_id: true, name: true, email: true, mrr_cents: true },
+        })
+
+        if (customer) {
+          // Emit a payment_failed event so dunning analytics can track it
+          await prisma.event.create({
+            data: {
+              company_id: customer.company_id,
+              customer_id: customer.id,
+              name: 'payment_failed',
+              occurred_at: new Date(),
+              properties: JSON.stringify({
+                invoice_id: (invoice as any).id,
+                amount_due: (invoice as any).amount_due,
+                attempt_count: (invoice as any).attempt_count ?? 1,
+              }),
+            },
+          })
+
+          // Recompute health score (will drop due to payment_status signal)
+          await healthScoreService.computeScoreForCustomer(customer.id, customer.company_id)
+          await billingService.snapshotCurrentMrr(customer.company_id)
+          kpiCache.invalidate(`kpis_${customer.company_id}`)
+
+          console.warn(
+            `[ALERT] Payment Failed: Customer "${customer.name}" <${customer.email}> ` +
+            `is now PAST DUE. MRR at risk: $${((customer.mrr_cents || 0) / 100).toFixed(2)}`
+          )
+        }
+        break
+      }
       default:
         break
     }
