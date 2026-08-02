@@ -1,13 +1,17 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAccounts, Account, useAccountEvents } from '../hooks/useKpis'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CheckCircle, AlertCircle, Clock, XCircle, Search, X,
   CreditCard, Calendar, Mail, Building2, Tag, Activity,
-  TrendingUp, ExternalLink,
+  TrendingUp, ExternalLink, RefreshCw, Check
 } from 'lucide-react'
 import { clsx } from 'clsx'
+import CustomerTimeline from '../components/CustomerTimeline'
+import SegmentFilter, { SegmentType } from '../components/SegmentFilter'
+import CustomerNotes from '../components/CustomerNotes'
+import { api } from '../lib/api'
 
 function useDebouncedValue<T>(value: T, delayMs = 300): T {
   const [debounced, setDebounced] = React.useState(value)
@@ -48,105 +52,151 @@ const formatMRR = (cents: number) =>
 const AVATAR_COLORS = [
   'from-purple-500 to-indigo-600',
   'from-blue-500 to-cyan-500',
-  'from-rose-500 to-pink-500',
-  'from-amber-500 to-orange-500',
   'from-emerald-500 to-teal-500',
+  'from-rose-500 to-pink-600',
+  'from-amber-500 to-orange-500',
 ]
 
-// ─── Account Detail Slide-Over ────────────────────────────────────────────────
-
-interface AccountDetailPanelProps {
+interface DetailPanelProps {
   account: Account | null
   colorIdx: number
   onClose: () => void
 }
 
-const AccountDetailPanel: React.FC<AccountDetailPanelProps> = ({ account, colorIdx, onClose }) => {
-  const [activeTab, setActiveTab] = React.useState<'overview' | 'activity'>('overview')
+const AccountDetailPanel: React.FC<DetailPanelProps> = ({ account, colorIdx, onClose }) => {
+  const [tab, setTab] = React.useState<'details' | 'events'>('details')
   const { data: events, isLoading: eventsLoading } = useAccountEvents(account?.id ?? null)
-  const sc = account ? (statusConfig[account.status as Status] ?? statusConfig.active) : null
-  const pc = account ? (planColor[account.plan as Plan] ?? planColor.starter) : null
-  const initials = account ? account.name.split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase() : ''
+  const [recovering, setRecovering] = useState(false)
+  const [recoveredMsg, setRecoveredMsg] = useState<string | null>(null)
 
-  // Reset tab when switching accounts
-  React.useEffect(() => { setActiveTab('overview') }, [account?.id])
+  useEffect(() => {
+    setTab('details')
+    setRecoveredMsg(null)
+  }, [account?.id])
 
-  // Close on Escape key
-  React.useEffect(() => {
-    if (!account) return
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [account, onClose])
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
+  if (!account) return null
+
+  const avatarGradient = AVATAR_COLORS[colorIdx % AVATAR_COLORS.length]
+  const initials = account.name.split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase()
+
+  const handleTriggerRecovery = async () => {
+    setRecovering(true)
+    try {
+      const res = await api.post('/api/dunning/recover', { customerId: account.id })
+      setRecoveredMsg(res.data?.message || 'Payment recovered successfully!')
+    } catch {
+      setRecoveredMsg('Failed to recover payment.')
+    } finally {
+      setRecovering(false)
+    }
+  }
 
   return (
     <AnimatePresence>
       {account && (
         <>
-          {/* Backdrop */}
           <motion.div
-            key="backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40"
+            className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-40"
           />
-          {/* Panel */}
+
           <motion.aside
-            key="panel"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            transition={{ type: 'spring', stiffness: 340, damping: 32 }}
-            className="fixed right-0 top-0 h-full w-full max-w-sm bg-white dark:bg-slate-900 shadow-2xl z-50 flex flex-col border-l border-slate-200 dark:border-slate-700"
+            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+            className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-white dark:bg-slate-900 z-50 shadow-2xl border-l border-slate-100 dark:border-slate-800 flex flex-col"
           >
-            {/* Header */}
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${AVATAR_COLORS[colorIdx % AVATAR_COLORS.length]} flex items-center justify-center text-white font-bold text-sm shrink-0`}>
-                    {initials}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-bold text-slate-900 dark:text-slate-100 truncate">{account.name}</p>
-                    <p className="text-xs text-slate-400 truncate">{account.email}</p>
-                  </div>
+            {/* Panel Header */}
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${avatarGradient} flex items-center justify-center text-white font-bold text-base shadow-md shadow-purple-500/20 shrink-0`}>
+                  {initials}
                 </div>
-                <button
-                  onClick={onClose}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0 ml-2"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{account.name}</h2>
+                  <p className="text-xs text-slate-400 font-mono mt-0.5">{account.email}</p>
+                </div>
               </div>
-              {/* Tab Selector */}
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mt-4 gap-1">
-                <button onClick={() => setActiveTab('overview')} className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${activeTab === 'overview' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}>Overview</button>
-                <button onClick={() => setActiveTab('activity')} className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${activeTab === 'activity' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}>Activity</button>
+              <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Stat Pill Bar */}
+            <div className="grid grid-cols-3 gap-2 px-6 py-3 bg-slate-50 dark:bg-slate-950/60 border-b border-slate-100 dark:border-slate-800 text-center">
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase">MRR</p>
+                <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100 tabular-nums">{formatMRR(account.mrr_cents)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase">Plan</p>
+                <p className="text-sm font-bold text-purple-600 dark:text-purple-400 capitalize">{account.plan}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase">Health</p>
+                <p className={`text-sm font-extrabold tabular-nums ${account.health_score >= 70 ? 'text-emerald-500' : account.health_score >= 40 ? 'text-amber-500' : 'text-rose-500'}`}>
+                  {account.health_score}/100
+                </p>
               </div>
             </div>
 
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-              {activeTab === 'overview' ? (
+            {/* Recovery Alert Banner if Past Due */}
+            {account.status === 'past_due' && (
+              <div className="mx-6 mt-4 p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                    <AlertCircle className="h-4 w-4" /> Dunning: Payment Past Due
+                  </span>
+                  <button onClick={handleTriggerRecovery} disabled={recovering} className="px-3 py-1 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700">
+                    {recovering ? 'Recovering…' : 'Recover MRR'}
+                  </button>
+                </div>
+                {recoveredMsg && <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">{recoveredMsg}</p>}
+              </div>
+            )}
+
+            {/* Tab selector */}
+            <div className="flex border-b border-slate-100 dark:border-slate-800 px-6 pt-2">
+              <button
+                onClick={() => setTab('details')}
+                className={`pb-2.5 text-xs font-bold transition-all border-b-2 mr-6 ${
+                  tab === 'details'
+                    ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+                    : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                }`}
+              >
+                Account Overview
+              </button>
+              <button
+                onClick={() => setTab('events')}
+                className={`pb-2.5 text-xs font-bold transition-all border-b-2 ${
+                  tab === 'events'
+                    ? 'border-purple-600 text-purple-600 dark:text-purple-400'
+                    : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                }`}
+              >
+                360° Journey Timeline {events?.length ? `(${events.length})` : ''}
+              </button>
+            </div>
+
+            {/* Scrollable Content Area */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {tab === 'details' ? (
                 <>
-                  <div className="flex gap-2 flex-wrap">
-                    {sc && <span className={clsx('inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full', sc.color)}>{sc.icon} {sc.label}</span>}
-                    {pc && <span className={clsx('inline-flex px-3 py-1 text-xs font-semibold rounded-full capitalize', pc)}>{account.plan} Plan</span>}
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3.5">
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-1">Monthly Revenue</p>
-                      <p className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tabular-nums">{formatMRR(account.mrr_cents)}</p>
-                    </div>
-                    <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3.5">
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-1">Billing Cycle</p>
-                      <p className="text-xl font-extrabold text-slate-900 dark:text-slate-100 capitalize">{account.billing_cycle || '—'}</p>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Account Details</p>
+                  <div className="space-y-3">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Account Details</p>
                     <div className="bg-white dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-700 divide-y divide-slate-50 dark:divide-slate-700/60">
                       <DetailRow icon={<Mail className="h-3.5 w-3.5" />} label="Email" value={account.email} />
                       <DetailRow icon={<Building2 className="h-3.5 w-3.5" />} label="Account Name" value={account.name} />
@@ -158,39 +208,14 @@ const AccountDetailPanel: React.FC<AccountDetailPanelProps> = ({ account, colorI
                     </div>
                   </div>
                   <StatusExplanation status={account.status as Status} trialEndsAt={account.trial_ends_at || null} />
+
+                  {/* Internal CRM Notes Panel */}
+                  <div className="pt-2">
+                    <CustomerNotes customerId={account.id} />
+                  </div>
                 </>
               ) : (
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Recent Activity</p>
-                  {eventsLoading ? (
-                    <div className="space-y-3 animate-pulse">
-                      {[1,2,3,4].map(i => (
-                        <div key={i} className="flex gap-3 items-center">
-                          <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700" />
-                          <div className="flex-1 space-y-1">
-                            <div className="h-3 w-28 bg-slate-200 dark:bg-slate-700 rounded" />
-                            <div className="h-2 w-20 bg-slate-100 dark:bg-slate-700/60 rounded" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : !events?.length ? (
-                    <div className="py-12 text-center space-y-2 text-slate-400">
-                      <Activity className="h-8 w-8 mx-auto text-slate-300 dark:text-slate-600" />
-                      <p className="text-xs font-medium">No recorded events yet</p>
-                    </div>
-                  ) : (
-                    <div className="relative border-l-2 border-slate-100 dark:border-slate-700 ml-3 space-y-4">
-                      {events.map((evt) => (
-                        <div key={evt.id} className="relative pl-5">
-                          <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-purple-100 dark:bg-purple-900/50 border-2 border-purple-500" />
-                          <p className="text-xs font-bold text-slate-800 dark:text-slate-100 capitalize">{evt.name.replace(/_/g, ' ')}</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">{new Date(evt.occurred_at || evt.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <CustomerTimeline events={events || []} customerName={account.name} />
               )}
             </div>
 
@@ -219,8 +244,8 @@ const AccountDetailPanel: React.FC<AccountDetailPanelProps> = ({ account, colorI
 const DetailRow: React.FC<{ icon: React.ReactNode; label: string; value: string }> = ({ icon, label, value }) => (
   <div className="flex items-center gap-3 px-3.5 py-2.5">
     <span className="text-slate-400 shrink-0">{icon}</span>
-    <span className="text-xs text-slate-500 dark:text-slate-400 w-24 shrink-0">{label}</span>
-    <span className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">{value}</span>
+    <span className="text-xs text-slate-500 dark:text-slate-400 w-24 shrink-0 font-medium">{label}</span>
+    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate flex-1">{value}</span>
   </div>
 )
 
@@ -265,13 +290,13 @@ const StatusExplanation: React.FC<{ status: Status; trialEndsAt: string | null }
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Main Accounts Page Component ─────────────────────────────────────────────
 
 const AccountsPage: React.FC = () => {
-  // URL-state filters so they survive refresh and can be shared
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('q') ?? ''
   const statusFilter = (searchParams.get('status') ?? '') as Status | ''
+  const [activeSegment, setActiveSegment] = useState<SegmentType>('all')
   const page = parseInt(searchParams.get('page') ?? '1', 10)
   const PAGE_SIZE = 10
 
@@ -279,18 +304,27 @@ const AccountsPage: React.FC = () => {
   const setStatusFilter = (val: Status | '') => setSearchParams(p => { val ? p.set('status', val) : p.delete('status'); p.set('page', '1'); return p }, { replace: true })
   const setPage = (fn: (p: number) => number) => setSearchParams(p => { p.set('page', String(fn(parseInt(p.get('page') ?? '1', 10)))); return p }, { replace: true })
 
-  // Page title
   useEffect(() => { document.title = 'Accounts | Pulse' }, [])
 
   const debouncedSearch = useDebouncedValue(search, 300)
-  const { data, isLoading } = useAccounts(page, PAGE_SIZE, statusFilter || undefined, debouncedSearch || undefined)
 
-  const accounts: Account[] = data?.data ?? []
+  // Map Segment filter choices to API params
+  const effectiveStatus = activeSegment === 'past_due' ? 'past_due' : activeSegment === 'trialing' ? 'trialing' : statusFilter || undefined
+  const { data, isLoading } = useAccounts(page, PAGE_SIZE, effectiveStatus, undefined, debouncedSearch || undefined)
+
+  let accounts: Account[] = data?.data ?? []
+
+  // Client-side Segment Filter refinements for Enterprise ($500+) and At-Risk
+  if (activeSegment === 'enterprise') {
+    accounts = accounts.filter(a => (a.mrr_cents || 0) >= 50000)
+  } else if (activeSegment === 'at_risk') {
+    accounts = accounts.filter(a => (a.health_score || 100) < 40)
+  }
+
   const pagination = data?.pagination
   const totalPages = pagination?.totalPages ?? 1
   const total = pagination?.total ?? 0
 
-  // Selected account for slide-over
   const [selectedAccount, setSelectedAccount] = React.useState<Account | null>(null)
   const [selectedColorIdx, setSelectedColorIdx] = React.useState(0)
 
@@ -298,164 +332,185 @@ const AccountsPage: React.FC = () => {
     name.split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase()
 
   return (
-    <>
-      <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-6 lg:p-8 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Accounts</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            {total > 0 ? `${total} customer${total !== 1 ? 's' : ''} tracked — click any row to view details` : 'Manage and filter all customer accounts'}
+            Manage customer accounts, track subscription health, and recover past-due revenue.
           </p>
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by name or email…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-            />
-          </div>
-
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value as Status | '')}
-            className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            {STATUS_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Table */}
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-700">
-                  {['Account', 'Plan', 'Status', 'MRR / mo', 'Billing', 'Joined'].map(h => (
-                    <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50 dark:divide-slate-700/60">
-                {isLoading && (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={i} className="animate-pulse">
-                      <td className="px-5 py-4"><div className="flex gap-3 items-center">
-                        <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700" />
-                        <div className="space-y-1.5"><div className="h-3 w-28 bg-slate-200 dark:bg-slate-700 rounded" /><div className="h-2.5 w-36 bg-slate-100 dark:bg-slate-700/60 rounded" /></div>
-                      </div></td>
-                      {Array.from({ length: 5 }).map((_, j) => (
-                        <td key={j} className="px-5 py-4"><div className="h-3 w-16 bg-slate-100 dark:bg-slate-700/60 rounded" /></td>
-                      ))}
-                    </tr>
-                  ))
-                )}
-                <AnimatePresence mode="popLayout">
-                  {!isLoading && accounts.map((account, i) => {
-                    const sc = statusConfig[account.status as Status] ?? statusConfig.active
-                    const pc = planColor[account.plan as Plan] ?? planColor.starter
-                    return (
-                      <motion.tr
-                        key={account.id}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ delay: i * 0.04 }}
-                        onClick={() => { setSelectedAccount(account); setSelectedColorIdx(i) }}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors cursor-pointer group"
-                      >
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${AVATAR_COLORS[i % AVATAR_COLORS.length]} flex items-center justify-center text-white text-xs font-semibold shrink-0 group-hover:scale-105 transition-transform`}>
-                              {getInitials(account.name)}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-medium text-slate-900 dark:text-slate-100 truncate group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">{account.name}</p>
-                              <p className="text-xs text-slate-400 truncate">{account.email}</p>
-                            </div>
-                            <ExternalLink className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600 group-hover:text-purple-400 transition-colors ml-auto shrink-0" />
-                          </div>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className={clsx('inline-flex px-2 py-0.5 text-xs font-medium rounded-full capitalize', pc)}>
-                            {account.plan}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className={clsx('inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full', sc.color)}>
-                            {sc.icon} {sc.label}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
-                          {formatMRR(account.mrr_cents)}
-                        </td>
-                        <td className="px-5 py-4 text-xs text-slate-500 dark:text-slate-400 capitalize">
-                          {account.billing_cycle}
-                        </td>
-                        <td className="px-5 py-4 text-xs text-slate-400">
-                          {new Date(account.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </td>
-                      </motion.tr>
-                    )
-                  })}
-                </AnimatePresence>
-
-                {!isLoading && accounts.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-16 text-center text-slate-400">
-                      <Activity className="h-8 w-8 mx-auto mb-3 opacity-40" />
-                      <p className="text-sm font-medium">No accounts match your filters</p>
-                      <p className="text-xs mt-1">Try clearing the search or changing the status filter</p>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="px-5 py-3.5 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
-              <p className="text-xs text-slate-500">
-                {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-3 py-1 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  Previous
-                </button>
-                <span className="px-3 py-1 text-xs text-slate-500">Page {page} of {totalPages}</span>
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page >= totalPages}
-                  className="px-3 py-1 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Slide-over Detail Panel */}
+      {/* Segment Filter Bar */}
+      <SegmentFilter
+        activeSegment={activeSegment}
+        onSelectSegment={(seg) => {
+          setActiveSegment(seg)
+          setPage(() => 1)
+        }}
+      />
+
+      {/* Search and Filters bar */}
+      <div className="flex flex-col sm:flex-row items-center gap-3">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search by customer name, email, or external ID…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all shadow-sm"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value as Status | '')}
+          className="w-full sm:w-44 px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all shadow-sm"
+        >
+          {STATUS_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Accounts Table */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/80 shadow-lg overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-slate-100 dark:border-slate-700/80 text-slate-400 uppercase tracking-wider text-[10px]">
+                <th className="py-3 px-4">Customer</th>
+                <th className="py-3 px-4 hidden sm:table-cell">Plan</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-right">MRR</th>
+                <th className="py-3 px-4 text-center hidden md:table-cell">Health</th>
+                <th className="py-3 px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+              {isLoading ? (
+                [1,2,3,4,5].map(i => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="py-3.5 px-4"><div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded" /></td>
+                    <td className="py-3.5 px-4 hidden sm:table-cell"><div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded" /></td>
+                    <td className="py-3.5 px-4"><div className="h-4 w-20 bg-slate-200 dark:bg-slate-700 rounded" /></td>
+                    <td className="py-3.5 px-4"><div className="h-4 w-12 bg-slate-200 dark:bg-slate-700 rounded ml-auto" /></td>
+                    <td className="py-3.5 px-4 hidden md:table-cell"><div className="h-4 w-12 bg-slate-200 dark:bg-slate-700 rounded mx-auto" /></td>
+                    <td className="py-3.5 px-4"><div className="h-4 w-16 bg-slate-200 dark:bg-slate-700 rounded ml-auto" /></td>
+                  </tr>
+                ))
+              ) : !accounts.length ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                    No matching customer accounts found.
+                  </td>
+                </tr>
+              ) : (
+                accounts.map((acc, i) => {
+                  const s = statusConfig[acc.status as Status] ?? statusConfig.active
+                  const pColor = planColor[acc.plan as Plan] ?? planColor.starter
+                  const initials = getInitials(acc.name)
+                  const gradient = AVATAR_COLORS[i % AVATAR_COLORS.length]
+
+                  return (
+                    <tr
+                      key={acc.id}
+                      onClick={() => { setSelectedAccount(acc); setSelectedColorIdx(i) }}
+                      className="hover:bg-slate-50/60 dark:hover:bg-slate-700/40 transition-colors cursor-pointer group"
+                    >
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-sm`}>
+                            {initials}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-900 dark:text-slate-100 group-hover:text-purple-600 transition-colors">{acc.name}</p>
+                            <p className="text-[10px] text-slate-400 font-mono">{acc.email}</p>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-4 hidden sm:table-cell">
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold capitalize ${pColor}`}>
+                          {acc.plan}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${s.color}`}>
+                          {s.icon} {s.label}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                        {formatMRR(acc.mrr_cents)}
+                      </td>
+
+                      <td className="py-3.5 px-4 text-center hidden md:table-cell font-bold text-slate-700 dark:text-slate-300">
+                        <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                          acc.health_score >= 70
+                            ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300'
+                            : acc.health_score >= 40
+                            ? 'text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300'
+                            : 'text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-300'
+                        }`}>
+                          {acc.health_score}/100
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-right">
+                        <button className="text-xs font-semibold text-purple-600 dark:text-purple-400 group-hover:underline flex items-center gap-1 ml-auto">
+                          View 360° <ExternalLink className="h-3 w-3" />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Footer */}
+        {totalPages > 1 && (
+          <div className="px-4 py-3 bg-slate-50/50 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-700/80 flex items-center justify-between text-xs text-slate-400">
+            <span>Showing {accounts.length} of {total} accounts</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">Page {page} of {totalPages}</span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Account Detail Slide-over Panel */}
       <AccountDetailPanel
         account={selectedAccount}
         colorIdx={selectedColorIdx}
         onClose={() => setSelectedAccount(null)}
       />
-    </>
+    </div>
   )
 }
 

@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Download, RefreshCw, AlertCircle, Clock, Activity, ChevronRight, Search, Command, Zap } from 'lucide-react';
+import { Download, RefreshCw, AlertCircle, Clock, Activity, ChevronRight, Search, Command, Zap, FileText } from 'lucide-react';
 import KPICard from '../components/KPICard';
 import MRRChart from '../components/MRRChart';
 import FunnelChart from '../components/FunnelChart';
 import RetentionRing from '../components/RetentionRing';
 import AccountsTable from '../components/AccountsTable';
 import CohortHeatmap from '../components/CohortHeatmap';
+import PredictiveRiskWidget from '../components/PredictiveRiskWidget';
+import MrrGoalWidget from '../components/MrrGoalWidget';
+import ExecutiveReportModal from '../components/ExecutiveReportModal';
 import { CommandPalette } from '../components/CommandPalette';
 import { OnboardingBanner } from '../components/OnboardingBanner';
 import { useKpis, useHealth, useMrrSeries, useProfile } from '../hooks/useKpis';
@@ -50,7 +53,7 @@ function timeAgo(date: Date): string {
   if (seconds < 60) return `${seconds}s ago`
   const minutes = Math.floor(seconds / 60)
   if (minutes < 60) return `${minutes} min ago`
-  const hours = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
   return `${hours}h ago`
 }
 
@@ -62,6 +65,7 @@ const Dashboard: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -154,6 +158,14 @@ const Dashboard: React.FC = () => {
             <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-[10px] font-mono text-slate-600 dark:text-slate-300">
               <Command className="h-2.5 w-2.5" />K
             </kbd>
+          </button>
+
+          {/* Executive Board Deck Trigger */}
+          <button
+            onClick={() => setReportOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 hover:bg-purple-100 text-xs font-bold border border-purple-200 dark:border-purple-800 transition-colors"
+          >
+            <FileText className="h-3.5 w-3.5" /> Board Deck Report
           </button>
 
           {lastUpdated && (
@@ -256,9 +268,19 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* MRR Target & Revenue Goal Tracker */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }}>
+        <MrrGoalWidget />
+      </motion.div>
+
       {/* MRR Main Chart */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
         <MRRChart />
+      </motion.div>
+
+      {/* Predictive Churn AI Widget */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }}>
+        <PredictiveRiskWidget />
       </motion.div>
 
       {/* Funnel + Retention Ring */}
@@ -303,6 +325,9 @@ const Dashboard: React.FC = () => {
 
       {/* Command Palette Modal */}
       <CommandPalette isOpen={cmdOpen} onClose={() => setCmdOpen(false)} />
+
+      {/* Executive Report Board Deck Modal */}
+      <ExecutiveReportModal isOpen={reportOpen} onClose={() => setReportOpen(false)} />
     </div>
   );
 };

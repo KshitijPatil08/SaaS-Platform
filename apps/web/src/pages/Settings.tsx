@@ -6,6 +6,8 @@ import {
   UserPlus, Users, ChevronLeft, ChevronRight, Download, Trash2, Send, Plus
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import WebhookPlayground from '../components/WebhookPlayground'
+import CsvImportWizard from '../components/CsvImportWizard'
 import { motion } from 'framer-motion'
 
 interface AdminUser {
@@ -616,11 +618,36 @@ const Settings: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <select
+                    value={adm.role || 'ADMIN'}
+                    onChange={(e) => {
+                      api.put(`/api/auth/team/${adm.id}/role`, { role: e.target.value }).then(fetchProfile)
+                    }}
+                    className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-semibold text-slate-700 dark:text-slate-300"
+                  >
+                    <option value="OWNER">Owner</option>
+                    <option value="ADMIN">Admin</option>
+                    <option value="ANALYST">Analyst</option>
+                    <option value="DEVELOPER">Developer</option>
+                  </select>
+
                   {adm.mfaEnabled ? (
                     <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 font-semibold text-[10px] rounded-full">2FA Active</span>
                   ) : (
                     <span className="px-2 py-0.5 bg-slate-100 text-slate-500 dark:bg-slate-800 font-medium text-[10px] rounded-full">2FA Off</span>
                   )}
+
+                  <button
+                    onClick={() => {
+                      if (confirm(`Remove admin access for ${adm.email}?`)) {
+                        api.delete(`/api/auth/team/${adm.id}`).then(fetchProfile)
+                      }
+                    }}
+                    className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors"
+                    title="Revoke Admin Access"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               </div>
             ))}
@@ -806,6 +833,9 @@ const Settings: React.FC = () => {
             </div>
           </div>
 
+          {/* Developer Webhook Simulator Playground */}
+          <WebhookPlayground />
+          
           {/* Outbound Slack / Discord Notifications Card */}
           <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
             <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100 dark:border-slate-700">
@@ -891,6 +921,9 @@ const Settings: React.FC = () => {
               </a>
             </div>
           </div>
+
+          {/* Historical CSV Data Migration Wizard */}
+          <CsvImportWizard />
         </motion.section>
       )}
     </div>

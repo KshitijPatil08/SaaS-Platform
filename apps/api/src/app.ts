@@ -23,10 +23,14 @@ import stripeWebhookRouter from './modules/billing/stripe.webhook'
 import vendorBillingRouter from './modules/vendor-billing/vendor-billing.routes'
 import vendorWebhookRouter from './modules/vendor-billing/vendor-billing.webhook'
 import { planGate, exportGate } from './modules/vendor-billing/plan-gate.middleware'
+import { startSnapshotWorker } from './jobs/mrr-snapshot.job'
 
 dotenv.config()
 
 const app = express()
+
+// Initialize background worker for daily MRR snapshot calculations
+startSnapshotWorker()
 
 // Security Headers
 app.use(helmet({
@@ -105,6 +109,15 @@ app.use(tokenRefreshMiddleware)
 
 import apiKeysRouter from './modules/api-keys/api-keys.routes'
 import notificationsRouter from './modules/notifications/slack-notifications.service'
+import inAppNotificationsRouter from './modules/notifications/notifications.routes'
+import dunningRouter from './modules/billing/dunning.routes'
+import webhookSimulatorRouter from './modules/billing/webhook-simulator.routes'
+import healthRulesRouter from './modules/analytics/health-rules.routes'
+import csvImportRouter from './modules/export/csv-import.routes'
+import mrrGoalRouter from './modules/analytics/mrr-goal.routes'
+import customerNotesRouter from './modules/accounts/customer-notes.routes'
+import savedSegmentsRouter from './modules/accounts/saved-segments.routes'
+import statusRouter from './modules/shared/status.routes'
 
 // Auth routes (public)
 app.use('/api/auth', authRouter)
@@ -115,12 +128,23 @@ app.use('/api/mrr', verifyJwt, mrrRouter)
 app.use('/api/funnel', verifyJwt, planGate, funnelRouter)
 app.use('/api/accounts', verifyJwt, planGate, accountsRouter)
 app.use('/api/health', verifyJwt, planGate, healthRouter)
+app.use('/api/health-rules', verifyJwt, healthRulesRouter)
 app.use('/api/churn', verifyJwt, planGate, churnRouter)
 app.use('/api/analytics', verifyJwt, planGate, cohortsRouter)
 app.use('/api/export', verifyJwt, exportGate, exportRouter)
+app.use('/api/export', verifyJwt, exportGate, csvImportRouter)
 app.use('/api/audit-logs', verifyJwt, auditRouter)
 app.use('/api/api-keys', verifyJwt, apiKeysRouter)
 app.use('/api/notifications', verifyJwt, notificationsRouter)
+app.use('/api/in-app-notifications', verifyJwt, inAppNotificationsRouter)
+app.use('/api/dunning', verifyJwt, dunningRouter)
+app.use('/api/webhooks-simulator', verifyJwt, webhookSimulatorRouter)
+app.use('/api/mrr-goal', verifyJwt, mrrGoalRouter)
+app.use('/api/customer-notes', verifyJwt, customerNotesRouter)
+app.use('/api/saved-segments', verifyJwt, savedSegmentsRouter)
+
+// Public — no auth required
+app.use('/api/status', statusRouter)
 
 // Vendor Billing — Pulse's own subscription management
 app.use('/api/vendor-billing', verifyJwt, vendorBillingRouter)

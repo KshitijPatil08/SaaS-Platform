@@ -3,11 +3,12 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Filter, Activity,
   Settings as SettingsIcon, LogOut, BarChart3, CreditCard,
-  Zap, TrendingUp, Sparkles, Crown, X, Sun, Moon
+  Zap, TrendingUp, Sparkles, Crown, X, Sun, Moon, Radio
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { useBillingStatus } from '../hooks/useKpis'
 import { useTheme } from '../hooks/useTheme'
+import NotificationBell from './NotificationBell'
 
 interface NavItem {
   label: string
@@ -23,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Health',     path: '/health',   icon: <Activity className="h-4 w-4" /> },
   { label: 'Billing',    path: '/billing',  icon: <CreditCard className="h-4 w-4" /> },
   { label: 'Settings',   path: '/settings', icon: <SettingsIcon className="h-4 w-4" /> },
+  { label: 'Status Page', path: '/status',  icon: <Radio className="h-4 w-4 text-emerald-400" /> },
 ]
 
 type PlanTier = 'free' | 'starter' | 'pro' | 'enterprise'
@@ -64,7 +66,7 @@ interface SideNavProps {
   onClose?: () => void
 }
 
-const SideNav: React.FC<SideNavProps> = ({ open = false, onClose }) => {
+export default function SideNav({ open = false, onClose }: SideNavProps) {
   const navigate = useNavigate()
   const { data: billing } = useBillingStatus()
   const { theme, toggleTheme } = useTheme()
@@ -74,19 +76,21 @@ const SideNav: React.FC<SideNavProps> = ({ open = false, onClose }) => {
   const handleLogout = async () => {
     try {
       await api.post('/api/auth/logout')
-    } catch { /* ignore */ }
+    } catch {
+      // Ignore network failure on logout — clear client auth state anyway
+    }
     navigate('/login')
   }
 
   const planMeta = plan ? PLAN_CONFIG[plan] : null
 
   return (
-    <nav
-      className={`fixed left-0 top-0 w-64 h-full bg-slate-900 dark:bg-slate-950 text-slate-100 border-r border-slate-800/80 z-40 shadow-2xl flex flex-col transition-transform duration-300 md:translate-x-0 ${
-        open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+    <aside
+      className={`fixed top-0 left-0 bottom-0 z-40 w-64 bg-slate-900 text-slate-100 flex flex-col border-r border-slate-800 transition-transform duration-200 ease-in-out md:translate-x-0 ${
+        open ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
-      {/* Brand */}
+      {/* Brand logo & header */}
       <div className="px-6 py-6 border-b border-slate-800/60 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/30">
@@ -99,15 +103,19 @@ const SideNav: React.FC<SideNavProps> = ({ open = false, onClose }) => {
             <p className="text-[10px] text-slate-500 mt-0.5 tracking-wide uppercase">Analytics Suite</p>
           </div>
         </div>
-        {/* Mobile close button */}
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        )}
+
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          {/* Mobile close button */}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Navigation items */}
@@ -201,8 +209,6 @@ const SideNav: React.FC<SideNavProps> = ({ open = false, onClose }) => {
           <span className="text-xs font-semibold">Sign Out</span>
         </button>
       </div>
-    </nav>
+    </aside>
   )
 }
-
-export default SideNav

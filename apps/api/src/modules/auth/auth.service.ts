@@ -146,7 +146,7 @@ export const authService = {
     }
   },
 
-  async inviteAdmin(companyId: string, email: string, initialPassword?: string) {
+  async inviteAdmin(companyId: string, email: string, initialPassword?: string, role?: string) {
     const existing = await prisma.adminUser.findFirst({ where: { email } })
     if (existing) {
       throw new Error('User with this email is already registered')
@@ -158,7 +158,8 @@ export const authService = {
         company_id: companyId,
         email,
         password_hash,
-      },
+        role: role || 'ADMIN',
+      } as any,
     })
     return {
       id: newAdmin.id,

@@ -34,6 +34,10 @@ model Company {
   admins        AdminUser[]
   audit_logs    AuditLog[]
   api_keys      ApiKey[]
+  notifications Notification[]
+  mrr_goal      MrrGoal?
+  customer_notes CustomerNote[]
+  saved_segments SavedSegment[]
 }
 
 
@@ -105,6 +109,7 @@ model Customer {
   events         Event[]
   health_scores  HealthScore[]
   churn_events   ChurnEvent[]
+  notes          CustomerNote[]
 
   @@unique([company_id, external_id])
   @@index([company_id])
@@ -200,4 +205,63 @@ model AuditLog {
 
   @@index([company_id, created_at(sort: Desc)])
   @@index([action])
+}
+
+// ─── In-App Notification Feed ─────────────────────────────────────────────────
+
+model Notification {
+  id         String   @id @default(uuid())
+  company_id String
+  company    Company  @relation(fields: [company_id], references: [id])
+  type       String   // 'churn' | 'payment_failed' | 'health_drop' | 'new_customer' | 'goal_reached'
+  title      String
+  body       String
+  read       Boolean  @default(false)
+  meta       String   @default("{}") // JSON: { customerId, mrrCents, ... }
+  created_at DateTime @default(now())
+
+  @@index([company_id, created_at(sort: Desc)])
+  @@index([company_id, read])
+}
+
+// ─── MRR Goal & Revenue Target ────────────────────────────────────────────────
+
+model MrrGoal {
+  id               String   @id @default(uuid())
+  company_id       String   @unique
+  company          Company  @relation(fields: [company_id], references: [id])
+  label            String   @default("MRR Target")
+  target_mrr_cents Int
+  target_date      DateTime
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+}
+
+// ─── Customer CRM Notes ───────────────────────────────────────────────────────
+
+model CustomerNote {
+  id          String   @id @default(uuid())
+  company_id  String
+  company     Company  @relation(fields: [company_id], references: [id])
+  customer_id String
+  customer    Customer @relation(fields: [customer_id], references: [id])
+  author      String   // admin email
+  body        String
+  created_at  DateTime @default(now())
+
+  @@index([customer_id])
+  @@index([company_id])
+}
+
+// ─── Saved Customer Segments ──────────────────────────────────────────────────
+
+model SavedSegment {
+  id         String   @id @default(uuid())
+  company_id String
+  company    Company  @relation(fields: [company_id], references: [id])
+  name       String
+  filters    String   // JSON string of filter parameters: { status, plan, minMrr, maxMrr, ... }
+  created_at DateTime @default(now())
+
+  @@index([company_id])
 }

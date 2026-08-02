@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom'
 import { queryClient } from './lib/queryClient'
@@ -13,7 +13,9 @@ import HealthPage from './pages/HealthPage'
 import BillingPage from './pages/BillingPage'
 import LandingPage from './pages/LandingPage'
 import DocsPage from './pages/DocsPage'
+import StatusPage from './pages/StatusPage'
 import { ThemeProvider } from './hooks/useTheme'
+import HotkeyCheatSheet from './components/HotkeyCheatSheet'
 
 import { Menu, BarChart3 } from 'lucide-react'
 
@@ -29,6 +31,47 @@ function AuthRedirect() {
 
 function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
+  const [hotkeyModalOpen, setHotkeyModalOpen] = useState(false)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    let pendingGKey = false
+    let timeout: any = null
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger when user is typing inside an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || (e.target as HTMLElement)?.isContentEditable) {
+        return
+      }
+
+      if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault()
+        setHotkeyModalOpen(o => !o)
+        return
+      }
+
+      if (e.key.toLowerCase() === 'g') {
+        pendingGKey = true
+        clearTimeout(timeout)
+        timeout = setTimeout(() => { pendingGKey = false }, 1000)
+        return
+      }
+
+      if (pendingGKey) {
+        pendingGKey = false
+        const k = e.key.toLowerCase()
+        if (k === 'd') navigate('/')
+        else if (k === 'a') navigate('/accounts')
+        else if (k === 'f') navigate('/funnel')
+        else if (k === 'h') navigate('/health')
+        else if (k === 's') navigate('/settings')
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [navigate])
 
   return (
     <div className="flex min-h-screen relative bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200">
@@ -58,7 +101,7 @@ function AppLayout() {
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-            aria-label="Open Navigation"
+            title="Open menu"
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -70,26 +113,30 @@ function AppLayout() {
             <Route path="/accounts" element={<AccountsPage />} />
             <Route path="/funnel" element={<FunnelPage />} />
             <Route path="/health" element={<HealthPage />} />
-            <Route path="/settings" element={<Settings />} />
             <Route path="/billing" element={<BillingPage />} />
+            <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>
       </div>
+
+      {/* Global Hotkey Cheat Sheet Modal */}
+      <HotkeyCheatSheet isOpen={hotkeyModalOpen} onClose={() => setHotkeyModalOpen(false)} />
     </div>
   )
 }
 
-function App() {
+export default function App() {
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
-        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Router>
           <AuthRedirect />
           <Routes>
-            <Route path="/welcome" element={<LandingPage />} />
-            <Route path="/docs" element={<DocsPage />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/landing" element={<LandingPage />} />
+            <Route path="/docs" element={<DocsPage />} />
+            <Route path="/status" element={<StatusPage />} />
             <Route path="/*" element={<AppLayout />} />
           </Routes>
         </Router>
@@ -97,5 +144,3 @@ function App() {
     </ThemeProvider>
   )
 }
-
-export default App

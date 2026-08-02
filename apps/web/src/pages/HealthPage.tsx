@@ -6,6 +6,7 @@ import {
   HeartPulse, AlertTriangle, CheckCircle2, XCircle, ChevronDown,
   Mail, TrendingUp, Phone, Lightbulb, Info,
 } from 'lucide-react'
+import HealthRuleBuilder from '../components/HealthRuleBuilder'
 import { Link } from 'react-router-dom'
 
 // ─── Score helpers ────────────────────────────────────────────────────────────
@@ -229,6 +230,9 @@ const HealthPage: React.FC = () => {
           )
         })}
       </div>
+
+      {/* Customizable Health Score Rule Builder */}
+      <HealthRuleBuilder />
 
       {/* Score explanation card */}
       <ScoreExplanationCard />

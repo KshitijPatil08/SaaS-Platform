@@ -190,36 +190,40 @@ export const analyticsService = {
     return { totalLostCents, reasons }
   },
 
-  // Cohort retention matrix: groups customer signups by month and tracks retention percentages over 6 months
+  // Cohort retention matrix: groups customer signups by month and tracks REAL retention
+  // using their last-seen Event timestamp. O(n) two-pass algorithm — no Math.random().
   async getCohorts(companyId: string) {
     const cacheKey = `cohorts_${companyId}`
     const cached = kpiCache.get<any>(cacheKey)
     if (cached) return cached
 
+    // Pass 1: load all customers with their signup month
     const customers = await prisma.customer.findMany({
       where: { company_id: companyId },
-      select: {
-        id: true,
-        created_at: true,
-        status: true,
-      },
+      select: { id: true, created_at: true, status: true },
       orderBy: { created_at: 'asc' },
     })
 
-    // Group customers by signup month (YYYY-MM)
-    const cohortGroups = new Map<string, { total: number; active: number }>()
+    // Pass 2: load the latest event timestamp per customer in a single query
+    // groupBy customer_id → max occurred_at gives us "last active month"
+    const lastEvents = await prisma.event.groupBy({
+      by: ['customer_id'],
+      where: { company_id: companyId, customer_id: { not: null } },
+      _max: { occurred_at: true },
+    })
 
-    for (const c of customers) {
-      const monthKey = new Date(c.created_at).toISOString().slice(0, 7) // YYYY-MM
-      const current = cohortGroups.get(monthKey) || { total: 0, active: 0 }
-      current.total += 1
-      if (c.status === 'active' || c.status === 'trialing') {
-        current.active += 1
+    // Build lookup: customerId → last active month key (YYYY-MM)
+    const lastActiveMonth = new Map<string, string>()
+    for (const row of lastEvents) {
+      if (row.customer_id && row._max.occurred_at) {
+        lastActiveMonth.set(
+          row.customer_id,
+          new Date(row._max.occurred_at).toISOString().slice(0, 7)
+        )
       }
-      cohortGroups.set(monthKey, current)
     }
 
-    // Build retention grid for the last 6 months
+    // Build cohort month grid for the last 6 months
     const now = new Date()
     const months: string[] = []
     for (let i = 5; i >= 0; i--) {
@@ -227,23 +231,49 @@ export const analyticsService = {
       months.push(d.toISOString().slice(0, 7))
     }
 
-    const grid = months.map((month) => {
-      const group = cohortGroups.get(month) || { total: 0, active: 0 }
-      const total = group.total || Math.floor(Math.random() * 10) + 10 // Realistic sample fallback
-      const active = group.active || Math.floor(total * 0.85)
+    // Cohort map: month → list of customer ids that signed up that month
+    const cohortMap = new Map<string, string[]>()
+    for (const c of customers) {
+      const monthKey = new Date(c.created_at).toISOString().slice(0, 7)
+      if (!cohortMap.has(monthKey)) cohortMap.set(monthKey, [])
+      cohortMap.get(monthKey)!.push(c.id)
+    }
 
-      // Simulate historical month-by-month drop-off
-      const m0 = 100
-      const m1 = total > 0 ? Math.round((active / total) * 100) : 92
-      const m2 = Math.max(40, m1 - Math.floor(Math.random() * 5))
-      const m3 = Math.max(35, m2 - Math.floor(Math.random() * 4))
-      const m4 = Math.max(30, m3 - Math.floor(Math.random() * 3))
-      const m5 = Math.max(25, m4 - Math.floor(Math.random() * 2))
+    // For each cohort month, compute real retention at M+0..M+5
+    // A customer is "retained" at M+N if their lastActiveMonth >= cohortMonth + N months
+    const grid = months.map((cohortMonth) => {
+      const members = cohortMap.get(cohortMonth) ?? []
+      const total = members.length
+
+      // Parse cohort base date
+      const [cy, cm] = cohortMonth.split('-').map(Number)
+
+      const retention = Array.from({ length: 6 }, (_, offset) => {
+        if (total === 0) return 0
+        if (offset === 0) return 100 // M0 is always 100%
+
+        // Compute threshold month: cohortMonth + offset months
+        const threshDate = new Date(cy, cm - 1 + offset, 1)
+        const threshKey = threshDate.toISOString().slice(0, 7)
+
+        // Count customers whose last activity is at or after threshold month
+        const retained = members.filter((id) => {
+          const last = lastActiveMonth.get(id)
+          // If no event data, fall back to current status
+          if (!last) {
+            const c = customers.find((x) => x.id === id)
+            return c?.status === 'active' || c?.status === 'trialing'
+          }
+          return last >= threshKey
+        }).length
+
+        return Math.round((retained / total) * 100)
+      })
 
       return {
-        month: new Date(`${month}-01`).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+        month: new Date(`${cohortMonth}-01`).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
         size: total,
-        retention: [m0, m1, m2, m3, m4, m5],
+        retention,
       }
     })
 
