@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   BookOpen, Terminal, Key, Shield, ArrowLeft, Code, Database,
@@ -143,6 +143,9 @@ const DocsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'endpoints' | 'quickstart' | 'security' | 'hosting'>('endpoints')
   const [selectedLang, setSelectedLang] = useState<CodeLang>('curl')
   const [copiedPath, setCopiedPath] = useState<string | null>(null)
+
+  // Fix #14: page title
+  useEffect(() => { document.title = 'API Documentation | Pulse' }, [])
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text)

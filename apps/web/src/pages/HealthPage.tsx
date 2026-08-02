@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useHealth, useKpis } from '../hooks/useKpis'
 import RetentionRing from '../components/RetentionRing'
 import { motion } from 'framer-motion'
@@ -7,6 +7,9 @@ import { HeartPulse, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
 const HealthPage: React.FC = () => {
   const { data: health, isLoading } = useHealth()
   const { data: kpis } = useKpis()
+
+  // Fix #14: page title
+  useEffect(() => { document.title = 'Health | Pulse' }, [])
 
   const customerCount = kpis?.customer_count ?? 0
   const healthPct = health
@@ -68,8 +71,10 @@ const HealthPage: React.FC = () => {
             <RetentionRing percentage={healthPct} totalCustomers={customerCount} />
           ) : (
             <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-6 flex flex-col items-center justify-center gap-3 min-h-[240px]">
-              <p className="text-2xl">🔵</p>
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400 text-center">No retention data yet</p>
+              {/* Fix #7: replaced 🔵 emoji with proper icon and actionable copy */}
+              <HeartPulse className="h-10 w-10 text-slate-300 dark:text-slate-600" />
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400 text-center">No health data yet</p>
+              <p className="text-xs text-slate-400 text-center max-w-xs">Connect your Stripe webhook and seed customer data to start seeing health scores.</p>
             </div>
           )}
         </div>

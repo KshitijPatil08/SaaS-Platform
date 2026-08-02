@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAccounts, Account } from '../hooks/useKpis'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, AlertCircle, Clock, XCircle, Search } from 'lucide-react'
@@ -41,10 +42,19 @@ const formatMRR = (cents: number) =>
   cents ? `$${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'
 
 const AccountsPage: React.FC = () => {
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<Status | ''>('')
-  const [page, setPage] = useState(1)
+  // Fix #5: sync filters to URL so they survive refresh and can be shared
+  const [searchParams, setSearchParams] = useSearchParams()
+  const search = searchParams.get('q') ?? ''
+  const statusFilter = (searchParams.get('status') ?? '') as Status | ''
+  const page = parseInt(searchParams.get('page') ?? '1', 10)
   const PAGE_SIZE = 10
+
+  const setSearch = (val: string) => setSearchParams(p => { val ? p.set('q', val) : p.delete('q'); p.set('page', '1'); return p }, { replace: true })
+  const setStatusFilter = (val: Status | '') => setSearchParams(p => { val ? p.set('status', val) : p.delete('status'); p.set('page', '1'); return p }, { replace: true })
+  const setPage = (fn: (p: number) => number) => setSearchParams(p => { p.set('page', String(fn(parseInt(p.get('page') ?? '1', 10)))); return p }, { replace: true })
+
+  // Fix #14: page title
+  useEffect(() => { document.title = 'Accounts | Pulse' }, [])
 
   const debouncedSearch = useDebouncedValue(search, 300)
 
@@ -88,14 +98,14 @@ const AccountsPage: React.FC = () => {
             type="text"
             placeholder="Search by name or email…"
             value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1) }}
+          onChange={e => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
           />
         </div>
 
         <select
           value={statusFilter}
-          onChange={e => { setStatusFilter(e.target.value as Status | ''); setPage(1) }}
+          onChange={e => setStatusFilter(e.target.value as Status | '')}
           className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
         >
           {STATUS_OPTIONS.map(opt => (

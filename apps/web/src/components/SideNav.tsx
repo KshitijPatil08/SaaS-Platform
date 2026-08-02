@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Filter, Activity,
   Settings as SettingsIcon, LogOut, BarChart3, CreditCard,
-  Zap, TrendingUp, Sparkles, Crown,
+  Zap, TrendingUp, Sparkles, Crown, X
 } from 'lucide-react'
 import { api } from '../lib/api'
+import { useBillingStatus } from '../hooks/useKpis'
 
 interface NavItem {
   label: string
@@ -57,19 +58,17 @@ const PLAN_CONFIG: Record<PlanTier, {
   },
 }
 
-const SideNav: React.FC = () => {
-  const navigate = useNavigate()
-  const [plan, setPlan] = useState<PlanTier | null>(null)
-  const [usagePct, setUsagePct] = useState(0)
+interface SideNavProps {
+  open?: boolean
+  onClose?: () => void
+}
 
-  useEffect(() => {
-    api.get('/api/vendor-billing/status')
-      .then(res => {
-        setPlan(res.data.plan as PlanTier)
-        setUsagePct(res.data.usagePct ?? 0)
-      })
-      .catch(() => { /* silently ignore — sidenav shouldn't break on billing API failure */ })
-  }, [])
+const SideNav: React.FC<SideNavProps> = ({ open = false, onClose }) => {
+  const navigate = useNavigate()
+  // Fix #15: use cached useBillingStatus query instead of uncached api.get on every mount
+  const { data: billing } = useBillingStatus()
+  const plan = (billing?.plan as PlanTier) ?? null
+  const usagePct = billing?.usagePct ?? 0
 
   const handleLogout = async () => {
     try {
@@ -81,9 +80,13 @@ const SideNav: React.FC = () => {
   const planMeta = plan ? PLAN_CONFIG[plan] : null
 
   return (
-    <nav className="fixed left-0 top-0 w-64 h-full bg-gradient-to-b from-slate-900 via-slate-950 to-black text-slate-100 z-20 shadow-2xl flex flex-col">
+    <nav
+      className={`fixed left-0 top-0 w-64 h-full bg-gradient-to-b from-slate-900 via-slate-950 to-black text-slate-100 z-40 shadow-2xl flex flex-col transition-transform duration-300 md:translate-x-0 ${
+        open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      }`}
+    >
       {/* Brand */}
-      <div className="px-6 py-7 border-b border-slate-800/60">
+      <div className="px-6 py-6 border-b border-slate-800/60 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/30">
             <BarChart3 className="h-4 w-4 text-white" />
@@ -95,6 +98,15 @@ const SideNav: React.FC = () => {
             <p className="text-[10px] text-slate-500 mt-0.5 tracking-wide uppercase">Analytics Suite</p>
           </div>
         </div>
+        {/* Mobile close button */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
       {/* Navigation items */}
@@ -104,6 +116,7 @@ const SideNav: React.FC = () => {
             key={item.path}
             to={item.path}
             end={item.path === '/'}
+            onClick={() => onClose?.()}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group ${
                 isActive
@@ -128,6 +141,7 @@ const SideNav: React.FC = () => {
         <div className="px-3 pb-3">
           <NavLink
             to="/billing"
+            onClick={() => onClose?.()}
             className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl ring-1 ${planMeta.classes} transition-all hover:opacity-90`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${planMeta.dotColor} shrink-0`} />

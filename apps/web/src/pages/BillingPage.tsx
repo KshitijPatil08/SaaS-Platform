@@ -178,6 +178,9 @@ const BillingPage: React.FC = () => {
     }
   }, [fetchStatus, stripeSuccess])
 
+  // Fix #14: page title
+  useEffect(() => { document.title = 'Billing | Pulse' }, [])
+
   const handleSubscribe = async (plan: string) => {
     setCheckoutLoading(plan)
     try {
@@ -233,7 +236,12 @@ const BillingPage: React.FC = () => {
             className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 text-sm font-medium"
           >
             <Check className="h-5 w-5 shrink-0" />
-            Payment successful! Your plan is being activated — this page will update automatically.
+            <span className="flex-1">Payment successful! Your plan is being activated — this page will update automatically.</span>
+            {/* Fix #6: visible polling feedback so users know sync is in progress */}
+            <span className="flex items-center gap-1.5 text-xs font-normal text-emerald-600 dark:text-emerald-400 shrink-0">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Syncing plan status…
+            </span>
           </motion.div>
         )}
         {stripeCanceled && (

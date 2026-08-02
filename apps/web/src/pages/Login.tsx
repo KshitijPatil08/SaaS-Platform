@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { Lock, ShieldCheck, Key, ArrowRight } from 'lucide-react'
@@ -11,6 +11,9 @@ const Login: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+
+  // Fix #14: page title
+  useEffect(() => { document.title = 'Sign In | Pulse' }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -100,3 +100,53 @@ export function useAccounts(page = 1, pageSize = 10, status?: string, search?: s
     },
   })
 }
+
+// ─── Profile — used by Dashboard for real webhookUrl ─────────────────────────
+
+export interface ProfileData {
+  companyId: string
+  companyName: string
+  stripeId: string | null
+  admin: { email: string; mfaEnabled: boolean } | null
+  webhookUrl: string
+}
+
+export function useProfile() {
+  return useQuery<ProfileData>({
+    queryKey: ['profile'],
+    queryFn: async () => {
+      const { data } = await api.get('/api/auth/profile')
+      return data
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes — profile doesn't change often
+    retry: false,              // don't retry on 401 — auth interceptor handles redirect
+  })
+}
+
+// ─── Billing Status — cached so SideNav doesn't refetch on every navigation ──
+
+export interface BillingStatus {
+  plan: 'free' | 'starter' | 'pro' | 'enterprise'
+  displayName: string
+  customerCount: number
+  customerCap: number | null
+  retentionDays: number | null
+  exports: boolean
+  teamAdminCap: number
+  monthlyUsdCents: number
+  usagePct: number
+  expiresAt: string | null
+  hasActiveSubscription: boolean
+}
+
+export function useBillingStatus() {
+  return useQuery<BillingStatus>({
+    queryKey: ['billing-status'],
+    queryFn: async () => {
+      const { data } = await api.get('/api/vendor-billing/status')
+      return data
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes — avoids firing on every page navigation
+    retry: false,
+  })
+}

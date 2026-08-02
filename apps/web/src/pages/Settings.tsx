@@ -74,10 +74,15 @@ const Settings: React.FC = () => {
   const [mfaTokenInput, setMfaTokenInput] = useState('')
   const [mfaLoading, setMfaLoading] = useState(false)
 
+  const [activeTab, setActiveTab] = useState<'general' | 'security' | 'team' | 'integrations'>('general')
+
   useEffect(() => {
     fetchProfile()
     fetchAuditData()
   }, [])
+
+  // Fix #14: page title
+  useEffect(() => { document.title = 'Settings | Pulse' }, [])
 
   const fetchProfile = async () => {
     try {
@@ -293,6 +298,13 @@ const Settings: React.FC = () => {
     )
   }
 
+  const TABS = [
+    { id: 'general' as const, label: 'General & Profile', icon: <Building className="h-4 w-4" /> },
+    { id: 'security' as const, label: 'Security & Audit', icon: <ShieldCheck className="h-4 w-4" /> },
+    { id: 'team' as const, label: 'Team Admins', icon: <Users className="h-4 w-4" /> },
+    { id: 'integrations' as const, label: 'Webhooks & API', icon: <LinkIcon className="h-4 w-4" /> },
+  ]
+
   return (
     <div className="p-6 lg:p-8 max-w-4xl space-y-6">
       <div>
@@ -346,387 +358,416 @@ const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* Section 1: Company & Credentials */}
-      <section className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-6">
-        <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100 dark:border-slate-700">
-          <Building className="h-5 w-5 text-purple-500" />
-          <div>
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Organization Profile & Stripe Key</h2>
-            <p className="text-xs text-slate-400">Update company details, admin email, and Stripe API keys</p>
-          </div>
-        </div>
+      {/* Fix #8: Tab Navigation Bar */}
+      <div className="flex border-b border-slate-200 dark:border-slate-700 gap-2 overflow-x-auto pb-0.5">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all border-b-2 whitespace-nowrap ${
+              activeTab === tab.id
+                ? 'border-purple-600 text-purple-600 dark:text-purple-400 bg-white dark:bg-slate-800 shadow-sm'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100/50 dark:hover:bg-slate-800/50'
+            }`}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-        <form onSubmit={handleUpdateProfile} className="space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Section 1: General & Profile */}
+      {activeTab === 'general' && (
+        <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-6">
+          <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100 dark:border-slate-700">
+            <Building className="h-5 w-5 text-purple-500" />
             <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Company Name</label>
-              <input
-                type="text"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                required
-                className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Admin Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
-              />
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Organization Profile & Stripe Key</h2>
+              <p className="text-xs text-slate-400">Update company details, admin email, and Stripe API keys</p>
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Stripe Account / Customer ID</label>
-            <input
-              type="text"
-              value={stripeId}
-              onChange={(e) => setStripeId(e.target.value)}
-              placeholder="cus_demo_xxx or acct_xxx"
-              className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
-            />
-          </div>
-
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-              <Key className="h-3.5 w-3.5 text-purple-500" /> Security & Password
-            </div>
+          <form onSubmit={handleUpdateProfile} className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Current Password</label>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Company Name</label>
                 <input
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder="Required for password updates or 2FA"
-                  className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                  type="text"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">New Password</label>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Admin Email</label>
                 <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Leave blank to keep unchanged"
-                  className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
                 />
               </div>
             </div>
-          </div>
 
-          <div className="flex justify-end pt-2">
-            <button
-              type="submit"
-              disabled={updating}
-              className="px-5 py-2.5 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors shadow-md shadow-purple-500/20"
-            >
-              {updating ? 'Saving Profile…' : 'Save Changes'}
-            </button>
-          </div>
-        </form>
-      </section>
-
-      {/* Section 2: Team Admin Management */}
-      <section className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-700">
-          <div className="flex items-center gap-2.5">
-            <Users className="h-5 w-5 text-purple-500" />
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Team Administrators</h2>
-              <p className="text-xs text-slate-400">Invite co-admins to access this organization's analytics dashboard</p>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Stripe Account / Customer ID</label>
+              <input
+                type="text"
+                value={stripeId}
+                onChange={(e) => setStripeId(e.target.value)}
+                placeholder="cus_demo_xxx or acct_xxx"
+                className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+              />
             </div>
-          </div>
-          <button
-            onClick={() => setShowInviteModal(!showInviteModal)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 transition-colors"
-          >
-            <UserPlus className="h-3.5 w-3.5" /> Invite Admin
-          </button>
-        </div>
 
-        {showInviteModal && (
-          <form onSubmit={handleInviteAdmin} className="p-4 bg-purple-50/50 dark:bg-purple-950/30 rounded-xl border border-purple-200 dark:border-purple-800 space-y-3">
-            <h3 className="text-xs font-bold text-purple-900 dark:text-purple-300">Invite New Administrator</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <input
-                type="email"
-                placeholder="coadmin@company.com"
-                value={inviteEmail}
-                onChange={e => setInviteEmail(e.target.value)}
-                required
-                className="px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
-              />
-              <input
-                type="password"
-                placeholder="Initial password (optional)"
-                value={invitePassword}
-                onChange={e => setInvitePassword(e.target.value)}
-                className="px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
-              />
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+                <Key className="h-3.5 w-3.5 text-purple-500" /> Security & Password
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Current Password</label>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Required for password updates or 2FA"
+                    className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">New Password</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Leave blank to keep unchanged"
+                    className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                  />
+                </div>
+              </div>
             </div>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowInviteModal(false)}
-                className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700"
-              >
-                Cancel
-              </button>
+
+            <div className="flex justify-end pt-2">
               <button
                 type="submit"
-                disabled={inviting}
-                className="px-4 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700"
+                disabled={updating}
+                className="px-5 py-2.5 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors shadow-md shadow-purple-500/20"
               >
-                {inviting ? 'Inviting…' : 'Send Invite'}
+                {updating ? 'Saving Profile…' : 'Save Changes'}
               </button>
             </div>
           </form>
-        )}
+        </motion.section>
+      )}
 
-        <div className="space-y-2">
-          {profile.admins?.map((adm) => (
-            <div key={adm.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-700/60 text-xs">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 flex items-center justify-center font-bold">
-                  {adm.email.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">{adm.email}</p>
-                  <p className="text-[10px] text-slate-400">Added {new Date(adm.createdAt).toLocaleDateString()}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {adm.mfaEnabled ? (
-                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 font-semibold text-[10px] rounded-full">2FA Active</span>
-                ) : (
-                  <span className="px-2 py-0.5 bg-slate-100 text-slate-500 dark:bg-slate-800 font-medium text-[10px] rounded-full">2FA Off</span>
-                )}
+      {/* Section 2: Team Admin Management */}
+      {activeTab === 'team' && (
+        <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-700">
+            <div className="flex items-center gap-2.5">
+              <Users className="h-5 w-5 text-purple-500" />
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Team Administrators</h2>
+                <p className="text-xs text-slate-400">Invite co-admins to access this organization's analytics dashboard</p>
               </div>
             </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Section 3: MFA Authentication */}
-      <section className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-700">
-          <div className="flex items-center gap-2.5">
-            <ShieldCheck className="h-5 w-5 text-purple-500" />
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Multi-Factor Authentication (2FA)</h2>
-              <p className="text-xs text-slate-400">Protect account access with TOTP apps like Google Authenticator or 1Password</p>
-            </div>
+            <button
+              onClick={() => setShowInviteModal(!showInviteModal)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 transition-colors"
+            >
+              <UserPlus className="h-3.5 w-3.5" /> Invite Admin
+            </button>
           </div>
-          {profile.admin?.mfaEnabled ? (
-            <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-full flex items-center gap-1">
-              <Check className="h-3.5 w-3.5" /> Enrolled
-            </span>
-          ) : (
-            <span className="px-3 py-1 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 text-xs font-bold rounded-full">
-              Not Enrolled
-            </span>
-          )}
-        </div>
 
-        {!profile.admin?.mfaEnabled ? (
-          <div className="space-y-4 pt-1">
-            {!mfaSecret ? (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-700/60">
-                <p className="text-xs text-slate-600 dark:text-slate-400">
-                  Generate a secret key to pair your preferred authenticator app.
-                </p>
+          {showInviteModal && (
+            <form onSubmit={handleInviteAdmin} className="p-4 bg-purple-50/50 dark:bg-purple-950/30 rounded-xl border border-purple-200 dark:border-purple-800 space-y-3">
+              <h3 className="text-xs font-bold text-purple-900 dark:text-purple-300">Invite New Administrator</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input
+                  type="email"
+                  placeholder="coadmin@company.com"
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  required
+                  className="px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
+                />
+                <input
+                  type="password"
+                  placeholder="Initial password (optional)"
+                  value={invitePassword}
+                  onChange={e => setInvitePassword(e.target.value)}
+                  className="px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={handleStartMfaEnroll}
-                  disabled={mfaLoading}
-                  className="px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold rounded-xl hover:opacity-90 transition-opacity shrink-0"
+                  onClick={() => setShowInviteModal(false)}
+                  className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700"
                 >
-                  {mfaLoading ? 'Generating Secret…' : 'Enroll 2FA'}
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={inviting}
+                  className="px-4 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700"
+                >
+                  {inviting ? 'Inviting…' : 'Send Invite'}
                 </button>
               </div>
-            ) : (
-              <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-xl space-y-4 border border-slate-200 dark:border-slate-700">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    Secret Key (Enter manually in authenticator app)
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <code className="text-sm font-mono bg-white dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-purple-600 dark:text-purple-400 select-all inline-block font-semibold">
-                      {mfaSecret}
-                    </code>
-                    <button
-                      onClick={() => copyToClipboard(mfaSecret)}
-                      className="px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-xs rounded-lg font-medium hover:bg-slate-300 dark:hover:bg-slate-600"
-                    >
-                      Copy Secret
-                    </button>
+            </form>
+          )}
+
+          <div className="space-y-2">
+            {profile.admins?.map((adm) => (
+              <div key={adm.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-700/60 text-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 flex items-center justify-center font-bold">
+                    {adm.email.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{adm.email}</p>
+                    <p className="text-[10px] text-slate-400">Added {new Date(adm.createdAt).toLocaleDateString()}</p>
                   </div>
                 </div>
-
-                <div className="pt-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Enter 6-Digit Code from Authenticator App to Verify
-                  </label>
-                  <div className="flex gap-2 max-w-xs">
-                    <input
-                      type="text"
-                      maxLength={6}
-                      value={mfaTokenInput}
-                      onChange={(e) => setMfaTokenInput(e.target.value)}
-                      placeholder="123456"
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono tracking-widest text-center"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleConfirmMfa}
-                      disabled={mfaLoading || mfaTokenInput.length !== 6}
-                      className="px-4 py-2 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors whitespace-nowrap"
-                    >
-                      Confirm
-                    </button>
-                  </div>
+                <div className="flex items-center gap-2">
+                  {adm.mfaEnabled ? (
+                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 font-semibold text-[10px] rounded-full">2FA Active</span>
+                  ) : (
+                    <span className="px-2 py-0.5 bg-slate-100 text-slate-500 dark:bg-slate-800 font-medium text-[10px] rounded-full">2FA Off</span>
+                  )}
                 </div>
               </div>
-            )}
+            ))}
           </div>
-        ) : (
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Two-factor authentication is active on your administrator account.
-          </p>
-        )}
-      </section>
+        </motion.section>
+      )}
 
-      {/* Section 4: Rate Limiting & Lockout Visibility */}
-      <section className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-700">
-          <div className="flex items-center gap-2.5">
-            <Gauge className="h-5 w-5 text-purple-500" />
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Rate Limiting & Lockout Machinery</h2>
-              <p className="text-xs text-slate-400">Monitor brute-force limiters and reset IP lockout restrictions</p>
-            </div>
-          </div>
-          <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-full">
-            Limiter Active
-          </span>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-700/60">
-          <div className="text-xs space-y-1">
-            <p className="font-semibold text-slate-900 dark:text-slate-100">
-              Current IP: <code className="font-mono text-purple-600 dark:text-purple-400">{lockout?.ip || '127.0.0.1'}</code>
-            </p>
-            <p className="text-slate-500 dark:text-slate-400">
-              Max Auth Limit: <span className="font-semibold text-slate-700 dark:text-slate-300">10 attempts / 60 seconds</span>
-            </p>
-          </div>
-
-          <button
-            onClick={handleResetLockout}
-            disabled={resettingLockout}
-            className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold rounded-xl hover:opacity-90 transition-opacity shrink-0"
-          >
-            <Unlock className="h-3.5 w-3.5" />
-            {resettingLockout ? 'Resetting…' : 'Reset Lockouts'}
-          </button>
-        </div>
-      </section>
-
-      {/* Section 5: Security Audit Trail */}
-      <section className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-700">
-          <div className="flex items-center gap-2.5">
-            <History className="h-5 w-5 text-purple-500" />
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Security Audit Log</h2>
-              <p className="text-xs text-slate-400">Timestamped record of logins, data exports, and administrative actions</p>
-            </div>
-          </div>
-          <button
-            onClick={fetchAuditData}
-            disabled={logsLoading}
-            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
-            title="Refresh audit logs"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${logsLoading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-100 dark:border-slate-700 text-slate-400 uppercase tracking-wider text-[10px]">
-                <th className="py-2.5 px-3">Timestamp</th>
-                <th className="py-2.5 px-3">Event Action</th>
-                <th className="py-2.5 px-3">User Email</th>
-                <th className="py-2.5 px-3">IP Address</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-              {auditLogs.map((log) => (
-                <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
-                  <td className="py-2.5 px-3 font-mono text-slate-500 dark:text-slate-400">
-                    {new Date(log.createdAt).toLocaleString()}
-                  </td>
-                  <td className="py-2.5 px-3">{actionBadge(log.action)}</td>
-                  <td className="py-2.5 px-3 font-medium text-slate-900 dark:text-slate-100">{log.email}</td>
-                  <td className="py-2.5 px-3 font-mono text-slate-400">{log.ip}</td>
-                </tr>
-              ))}
-
-              {auditLogs.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="py-8 text-center text-slate-400">
-                    No security audit logs recorded yet.
-                  </td>
-                </tr>
+      {/* Section 3: Security, Rate Limiting & Audit */}
+      {activeTab === 'security' && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          {/* MFA */}
+          <section className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-700">
+              <div className="flex items-center gap-2.5">
+                <ShieldCheck className="h-5 w-5 text-purple-500" />
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Multi-Factor Authentication (2FA)</h2>
+                  <p className="text-xs text-slate-400">Protect account access with TOTP apps like Google Authenticator or 1Password</p>
+                </div>
+              </div>
+              {profile.admin?.mfaEnabled ? (
+                <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-full flex items-center gap-1">
+                  <Check className="h-3.5 w-3.5" /> Enrolled
+                </span>
+              ) : (
+                <span className="px-3 py-1 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 text-xs font-bold rounded-full">
+                  Not Enrolled
+                </span>
               )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </div>
 
-      {/* Section 6: Webhooks */}
-      <section className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
-        <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100 dark:border-slate-700">
-          <LinkIcon className="h-5 w-5 text-purple-500" />
-          <div>
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Stripe Webhook Integration</h2>
-            <p className="text-xs text-slate-400">Configure this URL in Stripe Dashboard &gt; Developers &gt; Webhooks</p>
-          </div>
-        </div>
+            {!profile.admin?.mfaEnabled ? (
+              <div className="space-y-4 pt-1">
+                {!mfaSecret ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-700/60">
+                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                      Generate a secret key to pair your preferred authenticator app.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleStartMfaEnroll}
+                      disabled={mfaLoading}
+                      className="px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold rounded-xl hover:opacity-90 transition-opacity shrink-0"
+                    >
+                      {mfaLoading ? 'Generating Secret…' : 'Enroll 2FA'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-xl space-y-4 border border-slate-200 dark:border-slate-700">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Secret Key (Enter manually in authenticator app)
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <code className="text-sm font-mono bg-white dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-purple-600 dark:text-purple-400 select-all inline-block font-semibold">
+                          {mfaSecret}
+                        </code>
+                        <button
+                          onClick={() => copyToClipboard(mfaSecret)}
+                          className="px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-xs rounded-lg font-medium hover:bg-slate-300 dark:hover:bg-slate-600"
+                        >
+                          Copy Secret
+                        </button>
+                      </div>
+                    </div>
 
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            readOnly
-            value={profile.webhookUrl || ''}
-            className="flex-1 px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-slate-700 dark:text-slate-300"
-          />
-          <button
-            type="button"
-            onClick={() => copyToClipboard(profile.webhookUrl || '')}
-            className="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition-colors flex items-center gap-1.5 shrink-0"
-          >
-            {copied ? (
-              <>
-                <Check className="h-3.5 w-3.5" /> Copied
-              </>
+                    <div className="pt-2">
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Enter 6-Digit Code from Authenticator App to Verify
+                      </label>
+                      <div className="flex gap-2 max-w-xs">
+                        <input
+                          type="text"
+                          maxLength={6}
+                          value={mfaTokenInput}
+                          onChange={(e) => setMfaTokenInput(e.target.value)}
+                          placeholder="123456"
+                          className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono tracking-widest text-center"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleConfirmMfa}
+                          disabled={mfaLoading || mfaTokenInput.length !== 6}
+                          className="px-4 py-2 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+                        >
+                          Confirm
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
-              <>
-                <Copy className="h-3.5 w-3.5" /> Copy URL
-              </>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Two-factor authentication is active on your administrator account.
+              </p>
             )}
-          </button>
-        </div>
-      </section>
+          </section>
+
+          {/* Rate Limiting */}
+          <section className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-700">
+              <div className="flex items-center gap-2.5">
+                <Gauge className="h-5 w-5 text-purple-500" />
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Rate Limiting & Lockout Machinery</h2>
+                  <p className="text-xs text-slate-400">Monitor brute-force limiters and reset IP lockout restrictions</p>
+                </div>
+              </div>
+              <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-full">
+                Limiter Active
+              </span>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-700/60">
+              <div className="text-xs space-y-1">
+                <p className="font-semibold text-slate-900 dark:text-slate-100">
+                  Current IP: <code className="font-mono text-purple-600 dark:text-purple-400">{lockout?.ip || '127.0.0.1'}</code>
+                </p>
+                <p className="text-slate-500 dark:text-slate-400">
+                  Max Auth Limit: <span className="font-semibold text-slate-700 dark:text-slate-300">10 attempts / 60 seconds</span>
+                </p>
+              </div>
+
+              <button
+                onClick={handleResetLockout}
+                disabled={resettingLockout}
+                className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold rounded-xl hover:opacity-90 transition-opacity shrink-0"
+              >
+                <Unlock className="h-3.5 w-3.5" />
+                {resettingLockout ? 'Resetting…' : 'Reset Lockouts'}
+              </button>
+            </div>
+          </section>
+
+          {/* Audit Trail - Fix #11: added max-h-80 overflow-y-auto */}
+          <section className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-700">
+              <div className="flex items-center gap-2.5">
+                <History className="h-5 w-5 text-purple-500" />
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Security Audit Log</h2>
+                  <p className="text-xs text-slate-400">Timestamped record of logins, data exports, and administrative actions</p>
+                </div>
+              </div>
+              <button
+                onClick={fetchAuditData}
+                disabled={logsLoading}
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
+                title="Refresh audit logs"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${logsLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+
+            <div className="overflow-x-auto max-h-80 overflow-y-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="sticky top-0 bg-white dark:bg-slate-800 shadow-sm z-10">
+                  <tr className="border-b border-slate-100 dark:border-slate-700 text-slate-400 uppercase tracking-wider text-[10px]">
+                    <th className="py-2.5 px-3">Timestamp</th>
+                    <th className="py-2.5 px-3">Event Action</th>
+                    <th className="py-2.5 px-3">User Email</th>
+                    <th className="py-2.5 px-3">IP Address</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                  {auditLogs.slice(0, 50).map((log) => (
+                    <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+                      <td className="py-2.5 px-3 font-mono text-slate-500 dark:text-slate-400">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </td>
+                      <td className="py-2.5 px-3">{actionBadge(log.action)}</td>
+                      <td className="py-2.5 px-3 font-medium text-slate-900 dark:text-slate-100">{log.email}</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-400">{log.ip}</td>
+                    </tr>
+                  ))}
+
+                  {auditLogs.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center text-slate-400">
+                        No security audit logs recorded yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </motion.div>
+      )}
+
+      {/* Section 4: Webhooks & Integrations */}
+      {activeTab === 'integrations' && (
+        <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-4">
+          <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100 dark:border-slate-700">
+            <LinkIcon className="h-5 w-5 text-purple-500" />
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Stripe Webhook Integration</h2>
+              <p className="text-xs text-slate-400">Configure this URL in Stripe Dashboard &gt; Developers &gt; Webhooks</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              readOnly
+              value={profile.webhookUrl || ''}
+              className="flex-1 px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono text-slate-700 dark:text-slate-300"
+            />
+            <button
+              type="button"
+              onClick={() => copyToClipboard(profile.webhookUrl || '')}
+              className="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition-colors flex items-center gap-1.5 shrink-0"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3.5 w-3.5" /> Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5" /> Copy URL
+                </>
+              )}
+            </button>
+          </div>
+        </motion.section>
+      )}
     </div>
   )
 }

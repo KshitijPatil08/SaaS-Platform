@@ -57,6 +57,9 @@ const LandingPage: React.FC = () => {
   const navigate = useNavigate()
   const [demoLoading, setDemoLoading] = useState(false)
 
+  // Fix #14: page title
+  useEffect(() => { document.title = 'Pulse — Self-Hosted SaaS Revenue Intelligence' }, [])
+
   const handleLaunchDemo = async () => {
     setDemoLoading(true)
     try {
@@ -174,8 +177,10 @@ const LandingPage: React.FC = () => {
               {COMPARISON.map((row, idx) => (
                 <tr key={idx} className="hover:bg-slate-850/50 transition-colors">
                   <td className="py-3.5 px-5 font-semibold text-slate-200">{row.feature}</td>
-                  <td className="py-3.5 px-5 font-bold text-purple-300 bg-purple-950/20 flex items-center gap-1.5">
-                    <Check className="h-4 w-4 text-emerald-400 shrink-0" /> {row.pulse}
+                  <td className="py-3.5 px-5 font-bold text-purple-300 bg-purple-950/20">
+                    <div className="flex items-center gap-1.5">
+                      <Check className="h-4 w-4 text-emerald-400 shrink-0" /> {row.pulse}
+                    </div>
                   </td>
                   <td className="py-3.5 px-5 text-slate-400">{row.baremetrics}</td>
                   <td className="py-3.5 px-5 text-slate-400">{row.chartmogul}</td>

@@ -1,14 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
-import { Settings, Download, RefreshCw, AlertCircle } from 'lucide-react';
+import { Download, RefreshCw, AlertCircle, Clock, Activity } from 'lucide-react';
 import KPICard from '../components/KPICard';
 import MRRChart from '../components/MRRChart';
 import FunnelChart from '../components/FunnelChart';
 import RetentionRing from '../components/RetentionRing';
 import AccountsTable from '../components/AccountsTable';
 import { OnboardingBanner } from '../components/OnboardingBanner';
-import { useKpis, useHealth, useMrrSeries } from '../hooks/useKpis';
+import { useKpis, useHealth, useMrrSeries, useProfile } from '../hooks/useKpis';
 import { api } from '../lib/api';
 
 const KPI_CONFIGS = [
@@ -38,11 +37,37 @@ const KPI_CONFIGS = [
   },
 ]
 
+/** Returns a human-readable "X min ago" label */
+function timeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
+  if (seconds < 10) return 'just now'
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ago`
+}
+
 const Dashboard: React.FC = () => {
-  const { data: kpis, isLoading, error, refetch } = useKpis();
+  const { data: kpis, isLoading, error, refetch, dataUpdatedAt } = useKpis();
   const { data: health } = useHealth();
   const { data: mrrSeries } = useMrrSeries();
+  // Fix #4: get real webhookUrl from profile API instead of hardcoding localhost
+  const { data: profile } = useProfile();
   const [exporting, setExporting] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [, setTick] = useState(0); // forces re-render of timeAgo every 30s
+
+  // Fix #3: track when data was last refreshed
+  useEffect(() => {
+    if (dataUpdatedAt) setLastUpdated(new Date(dataUpdatedAt));
+  }, [dataUpdatedAt]);
+
+  // Re-render timeAgo label every 30s so it stays current
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const mrrCents = kpis?.mrr_cents ?? 0;
   const customerCount = kpis?.customer_count ?? 0;
@@ -64,12 +89,12 @@ const Dashboard: React.FC = () => {
       ? pctChange(mrrSeries.at(-1)!.customerCount, mrrSeries.at(-2)!.customerCount)
       : 0;
 
-  // Values: MRR converted to dollars for display, all others raw
+  // Fix #10: health KPI passes change: 0 — healthPct itself is not a delta vs last month
   const kpiValues = [
     { value: mrrCents / 100, change: mrrChange, direction: (mrrChange >= 0 ? 1 : -1) as 1 | -1 },
     { value: customerCount, change: customerChange, direction: (customerChange >= 0 ? 1 : -1) as 1 | -1 },
     { value: churnRate, change: churnRate, direction: -1 as const },
-    { value: healthPct, change: healthPct, direction: 1 as const },
+    { value: healthPct, change: 0, direction: 1 as const },
   ];
 
   const handleExport = async () => {
@@ -91,6 +116,17 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handleRefresh = () => {
+    refetch();
+    setLastUpdated(new Date());
+  };
+
+  // Fix #4: use real webhook URL from profile API (not localhost)
+  const webhookUrl = profile?.webhookUrl ?? '';
+
+  // Fix #14: page title
+  useEffect(() => { document.title = 'Dashboard | Pulse' }, []);
+
   return (
     <div className="p-6 lg:p-8 space-y-6">
       {/* Page header */}
@@ -101,9 +137,18 @@ const Dashboard: React.FC = () => {
             {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
         </div>
+
+        {/* Fix #2: Export CSV is now the primary (purple) action; Settings link removed from header */}
         <div className="flex items-center gap-2.5 flex-shrink-0">
+          {/* Fix #3: last-updated timestamp */}
+          {lastUpdated && (
+            <span className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 select-none">
+              <Clock className="h-3.5 w-3.5" />
+              Updated {timeAgo(lastUpdated)}
+            </span>
+          )}
           <button
-            onClick={() => refetch()}
+            onClick={handleRefresh}
             className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             title="Refresh data"
           >
@@ -112,18 +157,11 @@ const Dashboard: React.FC = () => {
           <button
             onClick={handleExport}
             disabled={exporting}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium shadow-md shadow-purple-500/20 disabled:opacity-50 transition-colors"
           >
             <Download className="h-4 w-4" />
             {exporting ? 'Exporting…' : 'Export CSV'}
           </button>
-          <Link
-            to="/settings"
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium transition-colors shadow-md shadow-purple-500/20"
-          >
-            <Settings className="h-4 w-4" />
-            Settings
-          </Link>
         </div>
       </div>
 
@@ -136,9 +174,9 @@ const Dashboard: React.FC = () => {
       )}
 
       {/* Onboarding Banner when no customers exist */}
-      {customerCount === 0 && (
+      {!isLoading && customerCount === 0 && webhookUrl && (
         <OnboardingBanner
-          webhookUrl="http://localhost:5000/webhooks/stripe"
+          webhookUrl={webhookUrl}
           onDataSeeded={() => refetch()}
         />
       )}
@@ -177,7 +215,8 @@ const Dashboard: React.FC = () => {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
           {customerCount === 0 ? (
             <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 min-h-[240px]">
-              <p className="text-2xl">🔵</p>
+              {/* Fix #7: replaced blue emoji with proper Lucide icon */}
+              <Activity className="h-10 w-10 text-slate-300 dark:text-slate-600" />
               <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">No retention data</p>
               <p className="text-xs text-slate-400 text-center max-w-xs">Retention data appears once customers and health scores are available.</p>
             </div>

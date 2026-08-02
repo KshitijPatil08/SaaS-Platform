@@ -14,6 +14,8 @@ import BillingPage from './pages/BillingPage'
 import LandingPage from './pages/LandingPage'
 import DocsPage from './pages/DocsPage'
 
+import { Menu, BarChart3 } from 'lucide-react'
+
 function AuthRedirect() {
   const navigate = useNavigate()
   useEffect(() => {
@@ -25,19 +27,53 @@ function AuthRedirect() {
 }
 
 function AppLayout() {
+  const [sidebarOpen, setSidebarOpen] = React.useState(false)
+
   return (
-    <div className="flex min-h-screen">
-      <SideNav />
-      <main className="flex-1 ml-64 bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900 min-h-screen">
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/accounts" element={<AccountsPage />} />
-          <Route path="/funnel" element={<FunnelPage />} />
-          <Route path="/health" element={<HealthPage />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/billing" element={<BillingPage />} />
-        </Routes>
-      </main>
+    <div className="flex min-h-screen relative bg-slate-900">
+      {/* Mobile Backdrop Overlay */}
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-30 md:hidden"
+        />
+      )}
+
+      {/* SideNav with open state & toggle callback */}
+      <SideNav open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col md:ml-64 min-w-0 bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900 min-h-screen">
+        {/* Mobile Header Bar */}
+        <header className="md:hidden flex items-center justify-between px-4 py-3 bg-slate-900 text-slate-100 border-b border-slate-800 sticky top-0 z-20">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+              <BarChart3 className="h-4 w-4 text-white" />
+            </div>
+            <span className="font-bold text-sm bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
+              Pulse
+            </span>
+          </div>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            aria-label="Open Navigation"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        </header>
+
+        <main className="flex-1">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/accounts" element={<AccountsPage />} />
+            <Route path="/funnel" element={<FunnelPage />} />
+            <Route path="/health" element={<HealthPage />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/billing" element={<BillingPage />} />
+          </Routes>
+        </main>
+      </div>
     </div>
   )
 }
