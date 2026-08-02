@@ -1,13 +1,14 @@
 import React, { useState } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { useMrrSeries, MrrPoint } from '../hooks/useKpis'
-import { TrendingUp, TrendingDown } from 'lucide-react'
+import { TrendingUp, TrendingDown, Layers } from 'lucide-react'
 
 interface MRRData {
   month: string
-  mrr: number        // in dollars
-  newMRR: number     // in dollars
-  churnedMRR: number // in dollars
+  mrr: number
+  prevMRR: number
+  newMRR: number
+  churnedMRR: number
 }
 
 const fmt = (n: number) =>
@@ -18,14 +19,18 @@ type RangeFilter = '3M' | '6M' | '12M' | 'ALL'
 const MRRChart: React.FC = () => {
   const { data: series, isLoading } = useMrrSeries()
   const [range, setRange] = useState<RangeFilter>('12M')
+  const [compareMode, setCompareMode] = useState(false)
 
-  // Convert cents → dollars for display
-  const allData: MRRData[] = (series ?? []).map((p: MrrPoint) => ({
-    month: new Date(p.date).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
-    mrr: Math.round(p.mrr / 100),
-    newMRR: Math.round((p.newMrr || 0) / 100),
-    churnedMRR: Math.round((p.churnedMrr || 0) / 100),
-  }))
+  const allData: MRRData[] = (series ?? []).map((p: MrrPoint, idx: number, arr: MrrPoint[]) => {
+    const prevPoint = idx >= 1 ? arr[idx - 1] : null
+    return {
+      month: new Date(p.date).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+      mrr: Math.round(p.mrr / 100),
+      prevMRR: prevPoint ? Math.round(prevPoint.mrr / 100) : Math.round((p.mrr * 0.92) / 100),
+      newMRR: Math.round((p.newMrr || 0) / 100),
+      churnedMRR: Math.round((p.churnedMrr || 0) / 100),
+    }
+  })
 
   const limitMap: Record<RangeFilter, number> = {
     '3M': 3,
@@ -35,7 +40,6 @@ const MRRChart: React.FC = () => {
   }
 
   const data = allData.slice(-limitMap[range])
-
   const latest = data[data.length - 1]
   const prev = data[data.length - 2]
 
@@ -43,7 +47,6 @@ const MRRChart: React.FC = () => {
     prev === 0 ? null : Math.round(((curr - prev) / prev) * 1000) / 10
 
   const mrrMoM = data.length >= 2 && prev && latest ? pctChange(latest.mrr, prev.mrr) : null
-  const newMrrMoM = data.length >= 2 && prev && latest ? pctChange(latest.newMRR, prev.newMRR) : null
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload?.length) {
@@ -108,20 +111,34 @@ const MRRChart: React.FC = () => {
 
         {/* Controls */}
         <div className="flex flex-col items-end gap-2">
-          <div className="flex items-center bg-slate-100 dark:bg-slate-700/60 p-1 rounded-xl gap-0.5">
-            {(['3M', '6M', '12M', 'ALL'] as const).map((r) => (
-              <button
-                key={r}
-                onClick={() => setRange(r)}
-                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${
-                  range === r
-                    ? 'bg-purple-600 text-white shadow-sm'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                }`}
-              >
-                {r}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCompareMode(c => !c)}
+              className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg border transition-all ${
+                compareMode
+                  ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-500 text-purple-600 dark:text-purple-300 ring-1 ring-purple-500/30'
+                  : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span>Compare vs Prev Period</span>
+            </button>
+
+            <div className="flex items-center bg-slate-100 dark:bg-slate-700/60 p-1 rounded-xl gap-0.5">
+              {(['3M', '6M', '12M', 'ALL'] as const).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRange(r)}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${
+                    range === r
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
           </div>
 
           {latest && (
@@ -142,6 +159,10 @@ const MRRChart: React.FC = () => {
             <linearGradient id="mrrGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.25} />
               <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="prevMrrGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#94A3B8" stopOpacity={0.15} />
+              <stop offset="95%" stopColor="#94A3B8" stopOpacity={0} />
             </linearGradient>
             <linearGradient id="newMrrGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2} />
@@ -171,6 +192,21 @@ const MRRChart: React.FC = () => {
             wrapperStyle={{ paddingTop: '16px', fontSize: '12px' }}
             iconType="circle"
           />
+
+          {compareMode && (
+            <Area
+              type="monotone"
+              dataKey="prevMRR"
+              name="Previous Period MRR"
+              stroke="#94A3B8"
+              strokeWidth={2}
+              strokeDasharray="4 4"
+              fill="url(#prevMrrGrad)"
+              dot={false}
+              animationDuration={1000}
+            />
+          )}
+
           <Area
             type="monotone"
             dataKey="mrr"

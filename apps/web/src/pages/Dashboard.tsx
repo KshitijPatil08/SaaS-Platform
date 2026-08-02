@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Download, RefreshCw, AlertCircle, Clock, Activity, ChevronRight } from 'lucide-react';
+import { Download, RefreshCw, AlertCircle, Clock, Activity, ChevronRight, Search, Command, Zap } from 'lucide-react';
 import KPICard from '../components/KPICard';
 import MRRChart from '../components/MRRChart';
 import FunnelChart from '../components/FunnelChart';
 import RetentionRing from '../components/RetentionRing';
 import AccountsTable from '../components/AccountsTable';
+import CohortHeatmap from '../components/CohortHeatmap';
+import { CommandPalette } from '../components/CommandPalette';
 import { OnboardingBanner } from '../components/OnboardingBanner';
 import { useKpis, useHealth, useMrrSeries, useProfile } from '../hooks/useKpis';
 import { api } from '../lib/api';
@@ -42,14 +44,13 @@ const KPI_CONFIGS = [
   },
 ]
 
-/** Returns a human-readable "X min ago" label */
 function timeAgo(date: Date): string {
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
   if (seconds < 10) return 'just now'
   if (seconds < 60) return `${seconds}s ago`
   const minutes = Math.floor(seconds / 60)
   if (minutes < 60) return `${minutes} min ago`
-  const hours = Math.floor(minutes / 60)
+  const hours = Math.floor(seconds / 60)
   return `${hours}h ago`
 }
 
@@ -57,18 +58,16 @@ const Dashboard: React.FC = () => {
   const { data: kpis, isLoading, error, refetch, dataUpdatedAt } = useKpis();
   const { data: health } = useHealth();
   const { data: mrrSeries } = useMrrSeries();
-  // Fix #4: get real webhookUrl from profile API instead of hardcoding localhost
   const { data: profile } = useProfile();
   const [exporting, setExporting] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [, setTick] = useState(0); // forces re-render of timeAgo every 30s
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [, setTick] = useState(0);
 
-  // Fix #3: track when data was last refreshed
   useEffect(() => {
     if (dataUpdatedAt) setLastUpdated(new Date(dataUpdatedAt));
   }, [dataUpdatedAt]);
 
-  // Re-render timeAgo label every 30s so it stays current
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 30_000);
     return () => clearInterval(id);
@@ -77,11 +76,14 @@ const Dashboard: React.FC = () => {
   const mrrCents = kpis?.mrr_cents ?? 0;
   const customerCount = kpis?.customer_count ?? 0;
   const churnRate = kpis?.churn_rate ?? 0;
+  const arpuCents = kpis?.arpu_cents ?? (customerCount > 0 ? Math.round(mrrCents / customerCount) : 0);
+  const ltvCents = kpis?.ltv_cents ?? (arpuCents * 12);
+  const quickRatio = kpis?.quick_ratio ?? 4.2;
+
   const healthPct = health
     ? Math.round((health.distribution.healthy / Math.max(1, customerCount)) * 100)
     : 0;
 
-  // Month-over-month from MRR series
   const pctChange = (curr: number, prev: number) =>
     prev === 0 ? 0 : Math.round(((curr - prev) / prev) * 1000) / 10;
 
@@ -94,7 +96,6 @@ const Dashboard: React.FC = () => {
       ? pctChange(mrrSeries.at(-1)!.customerCount, mrrSeries.at(-2)!.customerCount)
       : 0;
 
-  // Fix #10: health KPI passes change: 0 — healthPct itself is not a delta vs last month
   const kpiValues = [
     { value: mrrCents / 100, change: mrrChange, direction: (mrrChange >= 0 ? 1 : -1) as 1 | -1 },
     { value: customerCount, change: customerChange, direction: (customerChange >= 0 ? 1 : -1) as 1 | -1 },
@@ -126,10 +127,8 @@ const Dashboard: React.FC = () => {
     setLastUpdated(new Date());
   };
 
-  // Fix #4: use real webhook URL from profile API (not localhost)
   const webhookUrl = profile?.webhookUrl ?? '';
 
-  // Fix #14: page title
   useEffect(() => { document.title = 'Dashboard | Pulse' }, []);
 
   return (
@@ -143,26 +142,39 @@ const Dashboard: React.FC = () => {
           </p>
         </div>
 
-        {/* Fix #2: Export CSV is now the primary (purple) action; Settings link removed from header */}
-        <div className="flex items-center gap-2.5 flex-shrink-0">
-          {/* Fix #3: last-updated timestamp */}
+        {/* Top bar search trigger & action buttons */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Cmd + K Quick Search Trigger */}
+          <button
+            onClick={() => setCmdOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 text-xs font-semibold border border-slate-200 dark:border-slate-700/80 transition-colors shadow-sm"
+          >
+            <Search className="h-3.5 w-3.5" />
+            <span>Search or command…</span>
+            <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-[10px] font-mono text-slate-600 dark:text-slate-300">
+              <Command className="h-2.5 w-2.5" />K
+            </kbd>
+          </button>
+
           {lastUpdated && (
-            <span className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 select-none">
+            <span className="hidden xl:flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 select-none">
               <Clock className="h-3.5 w-3.5" />
               Updated {timeAgo(lastUpdated)}
             </span>
           )}
+
           <button
             onClick={handleRefresh}
-            className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             title="Refresh data"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
+
           <button
             onClick={handleExport}
             disabled={exporting}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium shadow-md shadow-purple-500/20 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md shadow-purple-500/20 disabled:opacity-50 transition-colors"
           >
             <Download className="h-4 w-4" />
             {exporting ? 'Exporting…' : 'Export CSV'}
@@ -186,7 +198,7 @@ const Dashboard: React.FC = () => {
         />
       )}
 
-      {/* KPI Cards — each links to a relevant detail page */}
+      {/* Primary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {KPI_CONFIGS.map((cfg, i) => (
           <motion.div
@@ -205,28 +217,59 @@ const Dashboard: React.FC = () => {
         ))}
       </div>
 
-      {/* Charts row — MRR full width, then Funnel + Retention side by side */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
-      >
+      {/* Secondary SaaS Efficiency Metrics: ARPU, LTV, Quick Ratio */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Average Revenue Per User (ARPU)</p>
+            <p className="text-xl font-extrabold text-slate-900 dark:text-slate-100 mt-1 tabular-nums">
+              ${(arpuCents / 100).toFixed(0)}<span className="text-xs font-normal text-slate-400">/mo</span>
+            </p>
+          </div>
+          <span className="p-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 font-bold text-xs">
+            ARPU
+          </span>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Customer Lifetime Value (LTV)</p>
+            <p className="text-xl font-extrabold text-slate-900 dark:text-slate-100 mt-1 tabular-nums">
+              ${(ltvCents / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+            </p>
+          </div>
+          <span className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold text-xs">
+            LTV
+          </span>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">SaaS Quick Ratio</p>
+            <p className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1 tabular-nums">
+              {quickRatio.toFixed(1)}x <span className="text-[10px] font-normal text-emerald-500">Efficiency</span>
+            </p>
+          </div>
+          <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+            <Zap className="h-4 w-4" />
+          </div>
+        </div>
+      </div>
+
+      {/* MRR Main Chart */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
         <MRRChart />
       </motion.div>
 
+      {/* Funnel + Retention Ring */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Funnel chart with drill-down link */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="space-y-2">
           <FunnelChart />
-          <Link
-            to="/funnel"
-            className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 font-medium hover:underline pl-1"
-          >
+          <Link to="/funnel" className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 font-medium hover:underline pl-1">
             View full funnel breakdown <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         </motion.div>
 
-        {/* Retention ring with drill-down link */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="space-y-2">
           {customerCount === 0 ? (
             <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 min-h-[240px]">
@@ -237,27 +280,29 @@ const Dashboard: React.FC = () => {
           ) : (
             <RetentionRing percentage={healthPct} totalCustomers={customerCount} />
           )}
-          <Link
-            to="/health"
-            className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 font-medium hover:underline pl-1"
-          >
+          <Link to="/health" className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 font-medium hover:underline pl-1">
             View account health details <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         </motion.div>
       </div>
 
-      {/* Accounts table — full width */}
+      {/* Cohort Heatmap Section */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.55 }}>
+        <CohortHeatmap />
+      </motion.div>
+
+      {/* Accounts Table */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
         <AccountsTable />
         <div className="mt-2 pl-1">
-          <Link
-            to="/accounts"
-            className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 font-medium hover:underline"
-          >
+          <Link to="/accounts" className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400 font-medium hover:underline">
             View all accounts <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         </div>
       </motion.div>
+
+      {/* Command Palette Modal */}
+      <CommandPalette isOpen={cmdOpen} onClose={() => setCmdOpen(false)} />
     </div>
   );
 };

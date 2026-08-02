@@ -22,6 +22,10 @@ model Company {
   vendor_subscription_id     String?  @unique           // active Stripe subscription ID
   plan_expires_at            DateTime?                  // null = active / no expiry
 
+  // Notifications & Slack Integrations
+  slack_webhook_url          String?
+  alert_email                String?
+
   customers     Customer[]
   events        Event[]
   mrr_snapshots MRRSnapshot[]
@@ -29,6 +33,7 @@ model Company {
   health_scores HealthScore[]
   admins        AdminUser[]
   audit_logs    AuditLog[]
+  api_keys      ApiKey[]
 }
 
 
@@ -38,6 +43,7 @@ model AdminUser {
   company         Company  @relation(fields: [company_id], references: [id])
   email           String
   password_hash   String
+  role            String   @default("ADMIN") // 'OWNER' | 'ADMIN' | 'ANALYST' | 'DEVELOPER'
   mfa_secret      String?  // TOTP secret (null until enrolled)
   mfa_enabled     Boolean  @default(false)
   created_at      DateTime @default(now())
@@ -48,10 +54,25 @@ model AdminUser {
   @@index([email])
 }
 
+// ─── Scoped API Keys ──────────────────────────────────────────────────────────
+
+model ApiKey {
+  id           String    @id @default(uuid())
+  company_id   String
+  company      Company   @relation(fields: [company_id], references: [id])
+  name         String
+  key_prefix   String    // e.g. "pulse_live_a1b2..."
+  hashed_key   String    @unique
+  scopes       String    @default("read:analytics") // comma-separated: 'read:analytics,write:customers,read:accounts'
+  last_used_at DateTime?
+  revoked_at   DateTime?
+  created_at   DateTime  @default(now())
+
+  @@index([company_id])
+  @@index([hashed_key])
+}
+
 // ─── Password Reset ───────────────────────────────────────────────────────────
-// Stores short-lived one-time tokens for the forgot-password flow.
-// In dev: the reset URL is returned directly in the API response.
-// In production: configure SMTP_* env vars to email the link.
 
 model PasswordResetToken {
   id         String    @id @default(uuid())
@@ -85,7 +106,7 @@ model Customer {
   health_scores  HealthScore[]
   churn_events   ChurnEvent[]
 
-  @@unique([company_id, external_id])   // Fix: was incorrectly global @unique
+  @@unique([company_id, external_id])
   @@index([company_id])
   @@index([status])
 }
@@ -144,7 +165,7 @@ model HealthScore {
   customer_id String
   customer   Customer @relation(fields: [customer_id], references: [id])
   score      Int
-  signals    String   @default("{}")  // JSON: { payment_status, trial_age_days, mrr_trend, account_age_days }
+  signals    String   @default("{}")
   computed_at DateTime @default(now())
 
   @@unique([company_id, customer_id, computed_at])
@@ -171,7 +192,7 @@ model AuditLog {
   company_id String
   company    Company  @relation(fields: [company_id], references: [id])
   user_email String
-  action     String   // 'LOGIN_SUCCESS' | 'LOGIN_FAILED' | 'EXPORT_DATA' | 'UPDATE_PROFILE' | 'ENROLL_MFA' | 'CONFIRM_MFA' | 'RESET_LOCKOUT'
+  action     String
   ip_address String?
   user_agent String?
   details    String   @default("{}")

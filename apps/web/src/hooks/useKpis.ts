@@ -5,6 +5,9 @@ export interface KpiSummary {
   mrr_cents: number
   customer_count: number
   churn_rate: number
+  arpu_cents?: number
+  ltv_cents?: number
+  quick_ratio?: number
 }
 
 export function useKpis() {
@@ -22,7 +25,7 @@ export interface MrrPoint {
   mrr: number
   newMrr: number
   churnedMrr: number
-  customerCount: number   // maps to customer_count from the MRRSnapshot; used for customer MoM trend
+  customerCount: number
 }
 
 export function useMrrSeries() {
@@ -71,29 +74,35 @@ export function useFunnel() {
 
 export interface Account {
   id: string
-  company_id: string
-  external_id: string | null
-  email: string
+  external_id: string
   name: string
+  email: string
   plan: string
   status: string
   mrr_cents: number
-  billing_cycle: string
-  trial_ends_at: string | null
+  health_score: number
   created_at: string
+  billing_cycle?: string
+  trial_ends_at?: string | null
 }
 
 export interface AccountsResponse {
   data: Account[]
-  pagination: { page: number; pageSize: number; total: number; totalPages: number }
+  pagination: {
+    page: number
+    pageSize: number
+    total: number
+    totalPages: number
+  }
 }
 
-export function useAccounts(page = 1, pageSize = 10, status?: string, search?: string) {
+export function useAccounts(page = 1, pageSize = 10, status?: string, plan?: string, search?: string) {
   return useQuery<AccountsResponse>({
-    queryKey: ['accounts', page, pageSize, status, search],
+    queryKey: ['accounts', page, pageSize, status, plan, search],
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
       if (status) params.set('status', status)
+      if (plan) params.set('plan', plan)
       if (search) params.set('search', search)
       const { data } = await api.get(`/api/accounts?${params.toString()}`)
       return data
@@ -101,74 +110,27 @@ export function useAccounts(page = 1, pageSize = 10, status?: string, search?: s
   })
 }
 
-export function useAccount(id: string | null) {
-  return useQuery<Account>({
-    queryKey: ['account', id],
-    queryFn: async () => {
-      const { data } = await api.get(`/api/accounts/${id}`)
-      return data
-    },
-    enabled: !!id,
-  })
-}
-
-// ─── Profile — used by Dashboard for real webhookUrl ─────────────────────────
-
-export interface ProfileData {
-  companyId: string
-  companyName: string
-  stripeId: string | null
-  admin: { email: string; mfaEnabled: boolean } | null
-  webhookUrl: string
-}
-
-export function useProfile() {
-  return useQuery<ProfileData>({
-    queryKey: ['profile'],
-    queryFn: async () => {
-      const { data } = await api.get('/api/auth/profile')
-      return data
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes — profile doesn't change often
-    retry: false,              // don't retry on 401 — auth interceptor handles redirect
-  })
-}
-
-// ─── Billing Status — cached so SideNav doesn't refetch on every navigation ──
-
-export interface BillingStatus {
-  plan: 'free' | 'starter' | 'pro' | 'enterprise'
-  displayName: string
-  customerCount: number
-  customerCap: number | null
-  retentionDays: number | null
-  exports: boolean
-  teamAdminCap: number
-  monthlyUsdCents: number
-  usagePct: number
-  expiresAt: string | null
-  hasActiveSubscription: boolean
-}
-
-export interface CustomerEvent {
+export interface AccountEvent {
   id: string
   name: string
-  properties: string
-  occurred_at: string
+  created_at: string
+  occurred_at?: string
+  payload: Record<string, any> | null
 }
 
-export function useAccountEvents(id: string | null) {
-  return useQuery<CustomerEvent[]>({
-    queryKey: ['account-events', id],
+export function useAccountEvents(accountId: string | null) {
+  return useQuery<AccountEvent[]>({
+    queryKey: ['account-events', accountId],
     queryFn: async () => {
-      const { data } = await api.get(`/api/accounts/${id}/events`)
+      if (!accountId) return []
+      const { data } = await api.get(`/api/accounts/${accountId}/events`)
       return data
     },
-    enabled: !!id,
+    enabled: !!accountId,
   })
 }
 
-export interface ChurnBreakdown {
+export interface ChurnReasonBreakdown {
   totalLostCents: number
   reasons: Array<{
     reason: string
@@ -179,23 +141,50 @@ export interface ChurnBreakdown {
 }
 
 export function useChurnBreakdown() {
-  return useQuery<ChurnBreakdown>({
+  return useQuery<ChurnReasonBreakdown>({
     queryKey: ['churn-breakdown'],
     queryFn: async () => {
-      const { data } = await api.get('/api/churn')
+      const { data } = await api.get('/api/churn/breakdown')
+      return data
+    },
+  })
+}
+
+export function useProfile() {
+  return useQuery({
+    queryKey: ['profile'],
+    queryFn: async () => {
+      const { data } = await api.get('/api/auth/profile')
       return data
     },
   })
 }
 
 export function useBillingStatus() {
-  return useQuery<BillingStatus>({
-    queryKey: ['billing-status'],
+  return useQuery({
+    queryKey: ['vendor-billing-status'],
     queryFn: async () => {
       const { data } = await api.get('/api/vendor-billing/status')
       return data
     },
-    staleTime: 5 * 60 * 1000,
-    retry: false,
+  })
+}
+
+export interface CohortsData {
+  months: string[]
+  grid: Array<{
+    month: string
+    size: number
+    retention: number[]
+  }>
+}
+
+export function useCohorts() {
+  return useQuery<CohortsData>({
+    queryKey: ['cohorts'],
+    queryFn: async () => {
+      const { data } = await api.get('/api/analytics/cohorts')
+      return data
+    },
   })
 }

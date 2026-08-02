@@ -157,7 +157,7 @@ const AccountDetailPanel: React.FC<AccountDetailPanelProps> = ({ account, colorI
                       )}
                     </div>
                   </div>
-                  <StatusExplanation status={account.status as Status} trialEndsAt={account.trial_ends_at} />
+                  <StatusExplanation status={account.status as Status} trialEndsAt={account.trial_ends_at || null} />
                 </>
               ) : (
                 <div className="space-y-3">
@@ -185,7 +185,7 @@ const AccountDetailPanel: React.FC<AccountDetailPanelProps> = ({ account, colorI
                         <div key={evt.id} className="relative pl-5">
                           <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-purple-100 dark:bg-purple-900/50 border-2 border-purple-500" />
                           <p className="text-xs font-bold text-slate-800 dark:text-slate-100 capitalize">{evt.name.replace(/_/g, ' ')}</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">{new Date(evt.occurred_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">{new Date(evt.occurred_at || evt.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                         </div>
                       ))}
                     </div>

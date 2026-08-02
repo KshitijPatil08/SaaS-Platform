@@ -15,6 +15,7 @@ import funnelRouter from './modules/analytics/funnel.routes'
 import accountsRouter from './modules/accounts/accounts.routes'
 import healthRouter from './modules/analytics/health.routes'
 import churnRouter from './modules/analytics/churn.routes'
+import cohortsRouter from './modules/analytics/cohorts.routes'
 import exportRouter from './modules/export/export.routes'
 import auditRouter from './modules/audit/audit.routes'
 import authRouter from './modules/auth/auth.routes'
@@ -102,6 +103,9 @@ app.get('/health', (req, res) => {
 // Token Refresh Middleware
 app.use(tokenRefreshMiddleware)
 
+import apiKeysRouter from './modules/api-keys/api-keys.routes'
+import notificationsRouter from './modules/notifications/slack-notifications.service'
+
 // Auth routes (public)
 app.use('/api/auth', authRouter)
 
@@ -112,8 +116,11 @@ app.use('/api/funnel', verifyJwt, planGate, funnelRouter)
 app.use('/api/accounts', verifyJwt, planGate, accountsRouter)
 app.use('/api/health', verifyJwt, planGate, healthRouter)
 app.use('/api/churn', verifyJwt, planGate, churnRouter)
+app.use('/api/analytics', verifyJwt, planGate, cohortsRouter)
 app.use('/api/export', verifyJwt, exportGate, exportRouter)
 app.use('/api/audit-logs', verifyJwt, auditRouter)
+app.use('/api/api-keys', verifyJwt, apiKeysRouter)
+app.use('/api/notifications', verifyJwt, notificationsRouter)
 
 // Vendor Billing — Pulse's own subscription management
 app.use('/api/vendor-billing', verifyJwt, vendorBillingRouter)
