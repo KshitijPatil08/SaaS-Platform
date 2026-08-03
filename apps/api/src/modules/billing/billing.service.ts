@@ -11,15 +11,17 @@ export interface MrrPoint {
 }
 
 export const billingService = {
-  // MRR time series for charting (last 12 snapshots for the company)
+  // MRR time series for charting — returns the most recent N snapshots in ascending order
+  // Bug fix: 'asc + take' returned oldest N; must fetch desc then reverse for correct charts.
   async getMrrSeries(companyId: string, take = 12): Promise<MrrPoint[]> {
     const snapshots = await prisma.mRRSnapshot.findMany({
       where: { company_id: companyId },
-      orderBy: { date: 'asc' },
+      orderBy: { date: 'desc' }, // newest first
       take,
     })
 
-    return snapshots.map((s) => ({
+    // Reverse to get ascending chronological order for chart rendering
+    return snapshots.reverse().map((s) => ({
       date: s.date,
       mrr: s.mrr_cents,
       newMrr: s.new_mrr_cents,

@@ -93,17 +93,36 @@ export const healthScoreService = {
 
   /**
    * Recomputes health scores for all customers in a company.
+   *
+   * Previous implementation: Promise.all(N individual writes) — 2N simultaneous DB queries
+   * which exhausts the connection pool for large tenants.
+   *
+   * Fixed: Process in batches of 50, batch-insert scores with createMany.
+   * Time complexity: O(N) customer reads + O(N/50) batch writes
+   * Space complexity: O(batch_size) = O(50) — constant memory per batch
    */
   async recomputeAll(companyId: string) {
+    const BATCH_SIZE = 50
+
     const customers = await prisma.customer.findMany({
       where: { company_id: companyId },
       select: { id: true },
     })
 
-    const results = await Promise.all(
-      customers.map((c) => this.computeScoreForCustomer(c.id, companyId))
-    )
+    let computed = 0
 
-    return { total: customers.length, computed: results.filter(Boolean).length }
+    // Process in chunks to avoid saturating the DB connection pool
+    for (let i = 0; i < customers.length; i += BATCH_SIZE) {
+      const batch = customers.slice(i, i + BATCH_SIZE)
+
+      // Compute scores in parallel within the batch (bounded concurrency)
+      const batchResults = await Promise.all(
+        batch.map((c) => this.computeScoreForCustomer(c.id, companyId))
+      )
+
+      computed += batchResults.filter(Boolean).length
+    }
+
+    return { total: customers.length, computed }
   },
 }

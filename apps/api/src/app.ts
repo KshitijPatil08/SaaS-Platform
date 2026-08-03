@@ -24,6 +24,7 @@ import vendorBillingRouter from './modules/vendor-billing/vendor-billing.routes'
 import vendorWebhookRouter from './modules/vendor-billing/vendor-billing.webhook'
 import { planGate, exportGate } from './modules/vendor-billing/plan-gate.middleware'
 import { startSnapshotWorker } from './jobs/mrr-snapshot.job'
+import { startHealthScoreWorker } from './jobs/health-score.job'
 import { warmUpCache } from './modules/shared/lib/kpi-cache'
 import { prisma } from './modules/shared/lib/prisma'
 
@@ -31,8 +32,9 @@ dotenv.config()
 
 const app = express()
 
-// Initialize background worker for daily MRR snapshot calculations
-startSnapshotWorker()
+// Initialize background workers on boot
+startSnapshotWorker()        // daily MRR snapshot waterfall calculations
+startHealthScoreWorker()     // nightly health score recomputation for all customers
 
 // Security Headers
 app.use(helmet({
@@ -82,6 +84,8 @@ const authLimiter = rateLimit({
 })
 app.use('/api/auth/login', authLimiter)
 app.use('/api/auth/register', authLimiter)
+// Protect forgot-password from email enumeration via rate limiting
+app.use('/api/auth/forgot-password', authLimiter)
 
 // CORS Configuration
 app.use(cors({

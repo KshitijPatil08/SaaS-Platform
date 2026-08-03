@@ -8,6 +8,7 @@ const JWT_REFRESH_SECRET = config.jwtRefreshSecret
 interface JwtPayload {
   companyId: string
   adminEmail?: string
+  role?: string
   exp?: number
 }
 
@@ -16,6 +17,7 @@ declare global {
     interface Request {
       companyId?: string
       adminEmail?: string
+      adminRole?: string // role from JWT — used by RBAC without a DB round-trip
     }
   }
 }
@@ -31,6 +33,7 @@ export const verifyJwt = (req: Request, res: Response, next: NextFunction) => {
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload
     req.companyId = decoded.companyId
     req.adminEmail = decoded.adminEmail
+    req.adminRole = decoded.role ?? 'ADMIN'
     next()
   } catch (error) {
     res.clearCookie('access_token')
@@ -53,6 +56,7 @@ export const tokenRefreshMiddleware = (
       const decoded = jwt.verify(accessToken, JWT_SECRET) as JwtPayload
       req.companyId = decoded.companyId
       req.adminEmail = decoded.adminEmail
+      req.adminRole = decoded.role ?? 'ADMIN'
       return next()
     } catch {
       // fall through to refresh logic
@@ -78,6 +82,7 @@ export const tokenRefreshMiddleware = (
 
       req.companyId = decoded.companyId
       req.adminEmail = decoded.adminEmail
+      req.adminRole = decoded.role ?? 'ADMIN'
       return next()
     } catch {
       // Stale/invalid refresh token: clear it and continue.

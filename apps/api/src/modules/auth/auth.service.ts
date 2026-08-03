@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcrypt'
+import crypto from 'crypto'
 import speakeasy from 'speakeasy'
 import { prisma } from '../shared/lib/prisma'
 import { config } from '../shared/lib/config'
@@ -24,10 +25,12 @@ export interface LoginResult {
 const ACCESS_MAX_AGE = 15 * 60 * 1000
 const REFRESH_MAX_AGE = 7 * 24 * 60 * 60 * 1000
 
-function issueTokens(companyId: string, adminEmail?: string): AuthTokens {
+// role is embedded in the JWT so RBAC middleware reads from the token
+// instead of firing a DB query on every protected request.
+function issueTokens(companyId: string, adminEmail?: string, role?: string): AuthTokens {
   return {
-    accessToken: jwt.sign({ companyId, adminEmail }, JWT_SECRET, { expiresIn: '15m' }),
-    refreshToken: jwt.sign({ companyId, adminEmail }, JWT_REFRESH_SECRET, { expiresIn: '7d' }),
+    accessToken: jwt.sign({ companyId, adminEmail, role: role ?? 'ADMIN' }, JWT_SECRET, { expiresIn: '15m' }),
+    refreshToken: jwt.sign({ companyId, adminEmail, role: role ?? 'ADMIN' }, JWT_REFRESH_SECRET, { expiresIn: '7d' }),
   }
 }
 
@@ -74,7 +77,7 @@ export const authService = {
 
     return {
       success: true,
-      tokens: issueTokens(admin.company_id, admin.email),
+      tokens: issueTokens(admin.company_id, admin.email, (admin as any).role),
       companyId: admin.company_id,
       adminEmail: admin.email,
     }
@@ -142,16 +145,19 @@ export const authService = {
         mfaEnabled: a.mfa_enabled,
         createdAt: a.created_at,
       })),
-      webhookUrl: `${config.clientOrigin.replace(':3000', ':5000')}/webhooks/stripe?company_id=${company.id}`,
+      // Use API_ORIGIN env var if set; avoids fragile port-swapping that breaks behind proxies
+      webhookUrl: `${process.env.API_ORIGIN || config.clientOrigin.replace(/:\d+$/, ':5000')}/webhooks/stripe?company_id=${company.id}`,
     }
   },
 
   async inviteAdmin(companyId: string, email: string, initialPassword?: string, role?: string) {
-    const existing = await prisma.adminUser.findFirst({ where: { email } })
+    // Scope uniqueness check to the company — one person can admin multiple tenants
+    const existing = await prisma.adminUser.findFirst({ where: { email, company_id: companyId } })
     if (existing) {
-      throw new Error('User with this email is already registered')
+      throw new Error('An admin with this email already exists in your organization')
     }
-    const tempPassword = initialPassword || 'PulseAdmin2026!'
+    // Always generate a cryptographically secure temp password — never use a hardcoded literal
+    const tempPassword = initialPassword || crypto.randomBytes(10).toString('hex')
     const password_hash = await bcrypt.hash(tempPassword, 12)
     const newAdmin = await prisma.adminUser.create({
       data: {
@@ -164,7 +170,7 @@ export const authService = {
     return {
       id: newAdmin.id,
       email: newAdmin.email,
-      tempPassword,
+      tempPassword, // returned once — caller must relay securely (e.g. email)
       created_at: newAdmin.created_at,
     }
   },
@@ -219,28 +225,36 @@ export const authService = {
         admins: { create: { email: input.email, password_hash } },
       },
     })
-    const tokens = issueTokens(company.id, input.email)
+    const tokens = issueTokens(company.id, input.email, 'OWNER') // first admin is OWNER
     return { success: true, companyId: company.id, tokens }
   },
 
+  /**
+   * @deprecated Use emailService.sendPasswordResetEmail() via auth.routes.ts instead.
+   * Kept for backward compatibility only — the route uses emailService which
+   * correctly generates crypto.randomBytes(32) tokens and invalidates old ones.
+   */
   async forgotPassword(email: string) {
     const admin = await prisma.adminUser.findFirst({ where: { email } })
     if (!admin) {
       return { success: true, message: 'If that email is registered, reset instructions have been generated.' }
     }
 
-    const token = Math.random().toString(36).substring(2) + Date.now().toString(36)
+    // Cryptographically secure 256-bit token (replaces old Math.random())
+    const token = crypto.randomBytes(32).toString('hex')
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hour
 
-    await (prisma as any).passwordResetToken.create({
-      data: {
-        token,
-        admin_id: admin.id,
-        expires_at: expiresAt,
-      },
+    // Invalidate any existing unused tokens first
+    await (prisma as any).passwordResetToken.updateMany({
+      where: { admin_id: admin.id, used: false },
+      data: { used: true },
     })
 
-    const resetUrl = `${config.clientOrigin}/reset-password?token=${token}`
+    await (prisma as any).passwordResetToken.create({
+      data: { token, admin_id: admin.id, expires_at: expiresAt, used: false },
+    })
+
+    const resetUrl = `${config.clientOrigin}/login?reset_token=${token}`
 
     return {
       success: true,

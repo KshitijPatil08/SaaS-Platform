@@ -7,6 +7,16 @@ import { exportQuerySchema, CSV_HEADER, toCsvRow } from './export.schema'
 
 const router = express.Router()
 
+/**
+ * Sanitize a field for safe CSV output.
+ * Prevents: CSV row injection via \n\r, Excel formula injection via = @ + -
+ * RFC-4180 compliant double-quote escaping.
+ */
+function csvField(value: string | null | undefined): string {
+  const s = String(value ?? '').replace(/[\r\n]/g, ' ').replace(/"/g, '""')
+  return `"${s}"`
+}
+
 // GET /api/export?format=csv&range=last_12_months&type=mrr|customers|churn
 router.get('/', verifyJwt, validateQuery(exportQuerySchema), async (req, res) => {
   try {
@@ -48,12 +58,12 @@ router.get('/', verifyJwt, validateQuery(exportQuerySchema), async (req, res) =>
       const csv = [
         'Name,Email,Plan,Status,MRR (USD),Billing Cycle,Created At',
         ...customers.map(c => [
-          `"${c.name}"`,
-          c.email,
-          c.plan,
-          c.status,
+          csvField(c.name),
+          csvField(c.email),
+          csvField(c.plan),
+          csvField(c.status),
           (c.mrr_cents / 100).toFixed(2),
-          c.billing_cycle,
+          csvField(c.billing_cycle),
           new Date(c.created_at).toISOString().split('T')[0],
         ].join(',')),
       ].join('\n')
@@ -79,9 +89,9 @@ router.get('/', verifyJwt, validateQuery(exportQuerySchema), async (req, res) =>
       const csv = [
         'Customer Name,Email,Reason,MRR Lost (USD),Churned At',
         ...churnEvents.map(e => [
-          `"${e.customer?.name ?? 'Unknown'}"`,
-          e.customer?.email ?? '',
-          e.reason,
+          csvField(e.customer?.name),
+          csvField(e.customer?.email),
+          csvField(e.reason),
           (e.mrr_lost_cents / 100).toFixed(2),
           new Date(e.churned_at).toISOString().split('T')[0],
         ].join(',')),

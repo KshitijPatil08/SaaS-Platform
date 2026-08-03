@@ -1,10 +1,18 @@
 import type { Request, Response, NextFunction } from 'express'
-import { prisma } from '../shared/lib/prisma'
 
 export type UserRole = 'OWNER' | 'ADMIN' | 'ANALYST' | 'DEVELOPER'
 
+/**
+ * RBAC Role enforcement middleware.
+ *
+ * Reads the role directly from req.adminRole (populated by auth.middleware from the JWT payload).
+ * This eliminates the O(1) DB query that was previously fired on every protected request.
+ *
+ * Role hierarchy: OWNER > ADMIN > ANALYST / DEVELOPER
+ * OWNER always passes — they have full access to all operations.
+ */
 export function requireRole(...allowedRoles: UserRole[]) {
-  return async (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     const adminEmail = req.adminEmail
     const companyId = req.companyId
 
@@ -12,25 +20,16 @@ export function requireRole(...allowedRoles: UserRole[]) {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    try {
-      const admin: any = await prisma.adminUser.findFirst({
-        where: { company_id: companyId, email: adminEmail },
-        select: { id: true, email: true, role: true } as any,
-      })
+    // Role is embedded in JWT and set by auth.middleware — no DB round-trip needed
+    const userRole = (req.adminRole as UserRole) || 'ADMIN'
 
-      const userRole = (admin?.role as UserRole) || 'ADMIN'
-
-      // OWNER has access to everything
-      if (userRole === 'OWNER' || allowedRoles.includes(userRole)) {
-        return next()
-      }
-
-      return res.status(403).json({
-        error: `Forbidden. Action requires one of the following roles: ${allowedRoles.join(', ')}`,
-      })
-    } catch (err) {
-      console.error('[rbac] Error verifying role:', err)
-      return res.status(500).json({ error: 'Internal server error checking user permissions' })
+    // OWNER has access to everything
+    if (userRole === 'OWNER' || allowedRoles.includes(userRole)) {
+      return next()
     }
+
+    return res.status(403).json({
+      error: `Forbidden. Action requires one of the following roles: ${allowedRoles.join(', ')}`,
+    })
   }
 }

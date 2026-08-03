@@ -165,10 +165,14 @@ export const predictiveChurnService = {
       ? Math.round((recentChurnCount / startingBase) * 1000) / 10
       : 0
 
+    const totalMrrCents = customers.reduce((sum, c) => sum + (c.mrr_cents || 0), 0)
+
     const result = {
       forecastedChurnRatePct: realChurnRatePct,
       atRiskAccountCount: atRiskAccounts.length,
       totalAtRiskMrrCents,
+      // at-risk MRR as % of total active MRR — gives frontend meaningful context
+      atRiskMrrPct: totalMrrCents > 0 ? Math.round((totalAtRiskMrrCents / totalMrrCents) * 100) : 0,
       accounts: atRiskAccounts.slice(0, 10), // Return top 10 highest-risk
     }
 

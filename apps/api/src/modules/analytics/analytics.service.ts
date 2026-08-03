@@ -79,6 +79,7 @@ export const analyticsService = {
   },
 
   // Conversion funnel counts with unique customer de-duplication
+  // O(E) where E = distinct event type count — avoids pulling all (name, customer_id) pairs into memory
   async getFunnel(companyId: string) {
     const events = await prisma.event.groupBy({
       by: ['name'],
@@ -86,16 +87,19 @@ export const analyticsService = {
       _count: { _all: true },
     })
 
-    const distinctEvents = await prisma.event.groupBy({
-      by: ['name', 'customer_id'],
-      where: { company_id: companyId, customer_id: { not: null } },
-    })
+    // Use a separate count query per funnel stage with distinct customer_id
+    // This avoids loading N rows into JS memory just to count unique customers
+    const funnelStages = ['signup', 'activation', 'trial_started', 'subscription_created']
+    const distinctCounts = await Promise.all(
+      funnelStages.map((stage) =>
+        prisma.event.groupBy({
+          by: ['customer_id'],
+          where: { company_id: companyId, name: stage, customer_id: { not: null } },
+        }).then((rows) => ({ stage, count: rows.length }))
+      )
+    )
 
-    const distinctCountByName = new Map<string, number>()
-    for (const item of distinctEvents) {
-      distinctCountByName.set(item.name, (distinctCountByName.get(item.name) || 0) + 1)
-    }
-
+    const distinctCountByName = new Map(distinctCounts.map((d) => [d.stage, d.count]))
     const rawCountByName = new Map(events.map((e) => [e.name, e._count._all]))
 
     const visitors = rawCountByName.get('visitor') ?? 0
@@ -245,6 +249,9 @@ export const analyticsService = {
       cohortMap.get(monthKey)!.push(c.id)
     }
 
+    // Pre-build an O(1) status lookup map to avoid O(N) Array.find() inside the retention loop
+    const customerStatusMap = new Map<string, string>(customers.map(c => [c.id, c.status]))
+
     // For each cohort month, compute real retention at M+0..M+5
     // A customer is "retained" at M+N if their lastActiveMonth >= cohortMonth + N months
     const grid = months.map((cohortMonth) => {
@@ -265,10 +272,10 @@ export const analyticsService = {
         // Count customers whose last activity is at or after threshold month
         const retained = members.filter((id) => {
           const last = lastActiveMonth.get(id)
-          // If no event data, fall back to current status
+          // O(1) Map lookup — replaces O(N) Array.find()
           if (!last) {
-            const c = customers.find((x) => x.id === id)
-            return c?.status === 'active' || c?.status === 'trialing'
+            const status = customerStatusMap.get(id)
+            return status === 'active' || status === 'trialing'
           }
           return last >= threshKey
         }).length

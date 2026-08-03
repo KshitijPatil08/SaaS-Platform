@@ -109,8 +109,8 @@ router.post('/recover', async (req: Request, res: Response) => {
       },
     })
 
-    // Invalidate KPI cache
-    kpiCache.set(`kpis_${companyId}`, null, 0)
+    // Correctly invalidate the KPI cache key so the next request recomputes from DB
+    kpiCache.invalidate(`kpis_${companyId}`)
 
     return res.json({
       success: true,
