@@ -122,31 +122,36 @@ export const analyticsService = {
   },
 
   // Health-score distribution + top at-risk accounts
+  // O(K) where K = active customer count — queries only the latest score per customer
+  // rather than loading all historical health score rows (which can be months × customers).
   async getHealth(companyId: string) {
-    const all = await prisma.healthScore.findMany({
-      where: { company_id: companyId },
-      orderBy: { computed_at: 'desc' },
-      include: { customer: { select: { name: true, email: true } } },
+    // Fetch each customer with only their single latest health score via relation ordering.
+    // This avoids loading the entire HealthScore history table into Node.js memory.
+    const customers = await prisma.customer.findMany({
+      where: {
+        company_id: companyId,
+        status: { not: 'canceled' },
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        health_scores: {
+          orderBy: { computed_at: 'desc' },
+          take: 1,
+          select: { score: true, signals: true },
+        },
+      },
     })
 
-    const seen = new Set<string>()
-    const scores: Array<{
-      customer_id: string
-      score: number
-      signals: unknown
-      customer: { name: string; email: string }
-    }> = []
-
-    for (const row of all) {
-      if (seen.has(row.customer_id)) continue
-      seen.add(row.customer_id)
-      scores.push({
-        customer_id: row.customer_id,
-        score: row.score,
-        signals: row.signals,
-        customer: row.customer as { name: string; email: string },
-      })
-    }
+    // Build scored list — customers without a health score yet default to 75 (neutral)
+    const scores = customers.map(c => ({
+      customer_id: c.id,
+      name: c.name,
+      email: c.email,
+      score: c.health_scores[0]?.score ?? 75,
+      signals: c.health_scores[0]?.signals ?? '{}',
+    }))
 
     const distribution = {
       healthy: scores.filter((s) => s.score >= 70).length,
@@ -156,18 +161,19 @@ export const analyticsService = {
 
     const topAtRisk = scores
       .filter((s) => s.score < 70)
-      .sort((a, b) => a.score - b.score)
+      .sort((a, b) => a.score - b.score)  // ascending: worst first
       .slice(0, 10)
       .map((s) => ({
         customer_id: s.customer_id,
-        name: s.customer.name,
-        email: s.customer.email,
+        name: s.name,
+        email: s.email,
         score: s.score,
         signals: s.signals,
       }))
 
     return { distribution, topAtRisk }
   },
+
 
   // Churn reason breakdown and total MRR lost
   async getChurnBreakdown(companyId: string) {

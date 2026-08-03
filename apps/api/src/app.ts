@@ -24,6 +24,8 @@ import vendorBillingRouter from './modules/vendor-billing/vendor-billing.routes'
 import vendorWebhookRouter from './modules/vendor-billing/vendor-billing.webhook'
 import { planGate, exportGate } from './modules/vendor-billing/plan-gate.middleware'
 import { startSnapshotWorker } from './jobs/mrr-snapshot.job'
+import { warmUpCache } from './modules/shared/lib/kpi-cache'
+import { prisma } from './modules/shared/lib/prisma'
 
 dotenv.config()
 
@@ -174,6 +176,9 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 const PORT = process.env.PORT || 5000
 app.listen(PORT, () => {
   console.log(`API server running on port ${PORT}`)
+  startSnapshotWorker()
+  // Warm up KPI cache 3s after boot so first requests don't cold-start the DB
+  setTimeout(() => warmUpCache(prisma).catch(console.warn), 3000)
 })
 
 export default app

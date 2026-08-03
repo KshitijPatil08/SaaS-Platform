@@ -3,21 +3,25 @@ import { prisma } from '../shared/lib/prisma'
 import { requireRole } from '../auth/rbac.middleware'
 
 export const slackService = {
-  async sendSlackAlert(webhookUrl: string, message: { text: string; blocks?: any[] }) {
-    if (!webhookUrl || !webhookUrl.startsWith('http')) return false
+  /**
+   * Dispatches a Slack webhook notification — fire-and-forget.
+   * We intentionally do NOT await the fetch so callers on the Stripe webhook
+   * thread return immediately. Slack latency (200–2000ms) must never block
+   * the Express response back to Stripe (which retries on timeout).
+   */
+  sendSlackAlert(webhookUrl: string, message: { text: string; blocks?: any[] }): void {
+    if (!webhookUrl || !webhookUrl.startsWith('http')) return
 
-    try {
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(message),
-      })
-      return response.ok
-    } catch (err) {
-      console.error('[slack-service] Error posting to Slack webhook:', err)
-      return false
-    }
+    // Fire-and-forget: enqueue the HTTP request but do not block the caller
+    fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(message),
+    }).catch((err: unknown) => {
+      console.error('[slack-service] Error posting to Slack webhook:', (err as Error).message)
+    })
   },
+
 
   async notifyNewSubscription(companyId: string, customerName: string, mrrUsd: number) {
     const company: any = await prisma.company.findUnique({
@@ -115,8 +119,12 @@ router.post('/test-slack', requireRole('OWNER', 'ADMIN', 'DEVELOPER'), async (re
   const { slackWebhookUrl } = req.body as { slackWebhookUrl: string }
 
   if (!slackWebhookUrl) return res.status(400).json({ error: 'Slack Webhook URL is required' })
+  if (!slackWebhookUrl.startsWith('http')) {
+    return res.status(400).json({ error: 'Invalid Slack Webhook URL format' })
+  }
 
-  const ok = await slackService.sendSlackAlert(slackWebhookUrl, {
+  // Dispatch is fire-and-forget — we return success immediately
+  slackService.sendSlackAlert(slackWebhookUrl, {
     text: `⚡ *Pulse SaaS Analytics Test Notification*`,
     blocks: [
       {
@@ -129,8 +137,7 @@ router.post('/test-slack', requireRole('OWNER', 'ADMIN', 'DEVELOPER'), async (re
     ],
   })
 
-  if (ok) return res.json({ success: true, message: 'Test message sent to Slack!' })
-  return res.status(400).json({ error: 'Failed to deliver test message to Slack webhook URL' })
+  return res.json({ success: true, message: 'Test message dispatched to Slack (fire-and-forget).' })
 })
 
 export default router
