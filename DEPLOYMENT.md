@@ -1,10 +1,10 @@
-# ⚡ Pulse SaaS — Deployment Guide
+#  Pulse SaaS — Deployment Guide
 
 Pulse SaaS is an enterprise-grade, self-hostable SaaS analytics engine designed for **zero-data-leakage deployment** inside your own cloud infrastructure (VPS, AWS EC2, GCP, Azure, or Kubernetes). You maintain 100% data custody.
 
 ---
 
-## 🛠️ Required Infrastructure Secrets
+##  Required Infrastructure Secrets
 
 | Secret Variable | Purpose | Generation Command / Notes |
 | :--- | :--- | :--- |
@@ -18,11 +18,11 @@ Pulse SaaS is an enterprise-grade, self-hostable SaaS analytics engine designed 
 | `REDIS_URL` | Shared Rate-Limit Store (optional for multi-replica) | `redis://your-redis:6379` |
 | `SLACK_WEBHOOK_URL` | Optional global default Slack channel alert webhook | `https://hooks.slack.com/services/xxx` |
 
-> ⚠️ **Fail-Fast Security Guarantee**: In production (`NODE_ENV=production`), the API will **refuse to start** if any required secret is missing. This is enforced at boot by `modules/shared/lib/config.ts`.
+>  **Fail-Fast Security Guarantee**: In production (`NODE_ENV=production`), the API will **refuse to start** if any required secret is missing. This is enforced at boot by `modules/shared/lib/config.ts`.
 
 ---
 
-## 🐳 Option A — Docker Compose Deployment
+##  Option A — Docker Compose Deployment
 
 ### 1. Configure Production Environment
 Copy `apps/api/.env.example` to `apps/api/.env` on your target server:
@@ -56,7 +56,7 @@ The API server automatically launches the **Daily MRR Snapshot Rollover Worker**
 
 ---
 
-## ☸️ Option B — Kubernetes Deployment (Helm)
+##  Option B — Kubernetes Deployment (Helm)
 
 ```bash
 # 1. Create Kubernetes Secret object
@@ -80,7 +80,7 @@ helm install pulse-dashboard ./charts/pulse-dashboard \
 
 ---
 
-## 🔒 Go-Live Security & Health Checklist
+##  Go-Live Security & Health Checklist
 
 - [ ] All 5 core secrets (`JWT_SECRET`, `JWT_REFRESH_SECRET`, `COOKIE_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) use 32+ byte crypto-random strings.
 - [ ] `NODE_ENV=production` is set to trigger fail-fast secret verification on boot.
@@ -91,7 +91,7 @@ helm install pulse-dashboard ./charts/pulse-dashboard \
 
 ---
 
-## 🗄️ Database Backup & Disaster Recovery (RPO / RTO)
+##  Database Backup & Disaster Recovery (RPO / RTO)
 
 ### Automated Daily Backup Script (`backup.sh`)
 ```bash

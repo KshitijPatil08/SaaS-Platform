@@ -1,35 +1,35 @@
-# ⚡ Pulse — Enterprise SaaS Revenue Analytics & Intelligence Platform
+#  Pulse — Enterprise SaaS Revenue Analytics & Intelligence Platform
 
 Pulse is a white-label, self-hostable, multi-tenant SaaS intelligence engine and executive analytics platform. Built for founders, Customer Success teams, and finance executives to track Monthly Recurring Revenue (MRR), cohort retention, predictive churn AI, automated dunning recovery, and subscription health in real time.
 
 ---
 
-## 🚀 Key Features & Enterprise Capabilities
+##  Key Features & Enterprise Capabilities
 
-### 📊 Revenue & Financial Analytics
+###  Revenue & Financial Analytics
 - **Real-Time MRR Waterfall**: 5-component revenue tracking — Total MRR, New MRR, Expansion MRR (upgrades), Contraction MRR (downgrades), and Churned MRR.
 - **SaaS Unit Economics**: Automatic computation of ARPU (Average Revenue Per User), LTV (Lifetime Value), 30-Day Rolling Churn Rate, and Quick Ratio efficiency scores.
 - **MRR Target Goal Tracker**: Set monthly/quarterly revenue targets with dynamic velocity forecasting and visual progress meters.
 - **Multi-Currency Ready**: Native support for cents normalization and flexible currency formatting.
 
-### 🔮 Predictive Churn AI & Health Engine
+###  Predictive Churn AI & Health Engine
 - **Deterministic Health Scoring**: Real-time 0–100 account health scores evaluated across payment status, activity decay velocity, and trial lifecycle.
 - **Customizable Health Rule Builder**: Interactive rule builder allowing teams to customize signal weights (inactivity penalties, past-due impact, trial urgency).
 - **Predictive Churn AI**: Multi-signal risk forecast engine classifying at-risk accounts into Low, Medium, and Critical Risk horizons with recommended CS action playbooks.
 
-### 👥 Customer CRM & Account Intelligence
+###  Customer CRM & Account Intelligence
 - **Interactive Customer Directory**: Paginated, searchable (debounced 300ms), and filterable customer table with status, plan, MRR, and health badges.
 - **Customer Drawer & Timeline**: Deep-dive slide-over drawer showing customer activity history, plan details, payment status, and lifetime events.
 - **Customer CRM Notes**: In-context internal notes log per customer for Customer Success collaboration.
 - **Saved Customer Segments**: Save, list, and switch custom customer filter presets (e.g., "VIP Enterprise Trialing", "High Risk").
 
-### ⚡ Developer Sandbox & Automation
+###  Developer Sandbox & Automation
 - **Stripe Webhook Simulator**: Developer sandbox inside `Settings > Webhooks & API` to simulate `customer.subscription.created`, `invoice.payment_failed`, and `customer.subscription.deleted` events without live Stripe keys.
 - **Scoped API Keys**: Secure sha256-hashed API key generator (`pulse_live_xxx`) with custom scopes and global `apiKeyMiddleware` bearer auth.
 - **Slack & Transactional Email Notifications**: Real-time Slack alert dispatches for new subscriptions & churn events, plus transactional email password reset flows (`email.service.ts`).
 - **CSV Data Import & Export Wizard**: Multi-step drag-and-drop CSV importer with column auto-mapping and dry-run validation, plus full CSV/JSON data export.
 
-### 🔒 Enterprise Security & Administration
+###  Enterprise Security & Administration
 - **Multi-Tenant Data Isolation**: Strict tenant isolation across all database queries via company-scoped parameters (`company_id`).
 - **Role-Based Access Control (RBAC)**: Fine-grained permissions (`OWNER`, `ADMIN`, `ANALYST`, `DEVELOPER`).
 - **Security Audit Logs**: Comprehensive security event logging with IP, user-agent, action metadata, and pageable audit log viewer with rate-limit IP lockout resets.
@@ -38,7 +38,7 @@ Pulse is a white-label, self-hostable, multi-tenant SaaS intelligence engine and
 
 ---
 
-## 🛠️ Technology Stack
+##  Technology Stack
 
 * **Frontend**: React 18, TypeScript, Vite, TailwindCSS, Framer Motion, Recharts, TanStack Query, Lucide Icons
 * **Backend**: Node.js, Express, TypeScript, Prisma ORM
@@ -48,7 +48,7 @@ Pulse is a white-label, self-hostable, multi-tenant SaaS intelligence engine and
 
 ---
 
-## 📁 Repository Structure
+##  Repository Structure
 
 ```
 pulse-saas/
@@ -83,7 +83,7 @@ pulse-saas/
 
 ---
 
-## ⚡ Quick Start (Local Development)
+##  Quick Start (Local Development)
 
 ### 1. Backend Setup
 ```bash
@@ -109,7 +109,7 @@ npm run dev                   # Starts React app on http://localhost:3000
 
 ---
 
-## 🧪 Verification & Build Commands
+##  Verification & Build Commands
 
 ```bash
 # Check Backend TypeScript Types
@@ -121,6 +121,4 @@ cd apps/web && npx tsc --noEmit
 
 ---
 
-## 📄 License & Attribution
 
-Distributed under the MIT License. Built with modern software engineering best practices.

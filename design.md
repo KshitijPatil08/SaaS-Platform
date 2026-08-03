@@ -1,4 +1,4 @@
-# 🎨 Pulse SaaS — Architecture & Design Specifications
+#  Pulse SaaS — Architecture & Design Specifications
 
 Software design patterns, module layering, security conventions, and component composition for the Pulse SaaS platform.
 

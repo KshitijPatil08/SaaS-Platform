@@ -43,14 +43,14 @@ Loaded and validated at application boot via `modules/shared/lib/config.ts`. In 
 
 | Environment Variable | Required in Prod | Used By | Purpose |
 | :--- | :--- | :--- | :--- |
-| `DATABASE_URL` | ✅ Yes | Prisma ORM | Database connection string |
-| `JWT_SECRET` | ✅ Yes | Auth Service | Access token signing (15 min) |
-| `JWT_REFRESH_SECRET` | ✅ Yes | Auth Service | Refresh token signing (7 days) |
-| `COOKIE_SECRET` | ✅ Yes | Cookie Parser | Cookie signature validation |
-| `STRIPE_SECRET_KEY` | ✅ Yes | Billing Module | Stripe SDK initialization |
-| `STRIPE_WEBHOOK_SECRET`| ✅ Yes | Webhook Handler | Stripe signature verification |
-| `CLIENT_ORIGIN` | ✅ Yes | CORS Middleware | Allowed frontend origin |
-| `NODE_ENV` | ✅ Yes | Application | `development` / `production` |
+| `DATABASE_URL` |  Yes | Prisma ORM | Database connection string |
+| `JWT_SECRET` |  Yes | Auth Service | Access token signing (15 min) |
+| `JWT_REFRESH_SECRET` |  Yes | Auth Service | Refresh token signing (7 days) |
+| `COOKIE_SECRET` |  Yes | Cookie Parser | Cookie signature validation |
+| `STRIPE_SECRET_KEY` |  Yes | Billing Module | Stripe SDK initialization |
+| `STRIPE_WEBHOOK_SECRET`|  Yes | Webhook Handler | Stripe signature verification |
+| `CLIENT_ORIGIN` |  Yes | CORS Middleware | Allowed frontend origin |
+| `NODE_ENV` |  Yes | Application | `development` / `production` |
 | `REDIS_URL` | Recommended | Rate Limiter | Shared rate limit store across replicas |
 | `PORT` | Optional | Express App | Server port (default `5000`) |
 
