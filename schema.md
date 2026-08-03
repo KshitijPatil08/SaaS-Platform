@@ -1,120 +1,186 @@
-# Pulse SaaS — Data Schema
+# Pulse SaaS — Database Schema Documentation
 
-Covers the Prisma models backing each domain and the Zod request schemas that validate input.
+> Comprehensive specification of Prisma ORM data models, relations, field constraints, and database indexing strategies for `apps/api/prisma/schema.prisma`.
 
-## 1. Prisma Models (by domain)
+---
 
-### Auth — `Company` + `AdminUser`
-- `Company`
-  - `id` (uuid, PK)
-  - `name` (string)
-  - `stripe_id` (string?, unique — Stripe customer id for the company)
-  - `created_at` (datetime)
-  - `admins` → `AdminUser[]`
-- `AdminUser`
-  - `id` (uuid, PK)
-  - `company_id` (fk → Company)
-  - `email` (string, unique per company — `@@unique([company_id, email])`)
-  - `password_hash` (string, bcrypt)
-  - `mfa_enabled` (bool, default false)
-  - `mfa_secret` (string?, base32 TOTP secret; null until enrolled)
+## 1. Entity-Relationship Summary
 
-### Accounts — `Customer`
-- `Customer`
-  - `id` (uuid, PK)
-  - `company_id` (fk → Company)
-  - `external_id` (string?, globally unique — Stripe `customer_id`)
-  - `name`, `email` (string)
-  - `plan` (string: `starter` | `pro` | `enterprise`)
-  - `status` (string: `active` | `past_due` | `canceled` | `trialing`)
-  - `mrr_cents` (int)
-  - `billing_cycle` (string: `monthly` | `yearly`)
-  - `trial_ends_at` (datetime?)
-  - `created_at` (datetime)
-
-### Billing — `Subscription` + `MRRSnapshot`
-- `Subscription`
-  - `id` (uuid, PK)
-  - `customer_id` (fk → Customer)
-  - `stripe_subscription_id` (string?, unique)
-  - `plan` (string, Stripe price id)
-  - `mrr_cents` (int)
-  - `status` (string, Stripe status)
-  - `current_period_start` / `current_period_end` (datetime)
-  - `canceled_at` (datetime?)
-- `MRRSnapshot`
-  - `id` (uuid, PK)
-  - `company_id` (fk → Company)
-  - `date` (datetime)
-  - `mrr_cents`, `new_mrr_cents`, `expansion_mrr_cents`, `contraction_mrr_cents`, `churned_mrr_cents` (int)
-  - `customer_count` (int)
-  - **`@@unique([company_id, date])`** — composite unique constraint; safe for multi-tenant use.
-    *(Previously `@@unique([date])` — would conflict when two companies shared the same date.)*
-
-### Analytics — `Event` + `HealthScore` + `ChurnEvent`
-- `Event`
-  - `id` (uuid, PK)
-  - `company_id` (fk → Company)
-  - `customer_id` (fk? → Customer)
-  - `name` (string: `visitor` | `signup` | `activation` | `trial_started` | `subscription_created`)
-  - `properties` (json string, default `{}`)
-  - `occurred_at` (datetime)
-- `HealthScore`
-  - `id` (uuid, PK)
-  - `company_id` (fk → Company)
-  - `customer_id` (fk → Customer)
-  - `score` (int 0–100)
-  - `signals` (json string, default `{}`)
-  - `computed_at` (datetime)
-  - `@@unique([company_id, customer_id, computed_at])` — append-only; queries read latest per customer.
-- `ChurnEvent`
-  - `id` (uuid, PK)
-  - `company_id` (fk → Company)
-  - `customer_id` (fk → Customer)
-  - `mrr_lost_cents` (int)
-  - `reason` (string)
-  - `churned_at` (datetime) — used to scope rolling-30-day churn rate calculation.
-
-## 2. Zod Request Schemas (by domain)
-
-### Auth (`auth.schema.ts`)
-| Schema | Fields |
-|--------|--------|
-| `loginSchema` | `email`, `password` (min 8), `mfaToken?` (6 digits) |
-| `registerSchema` | `companyName` (2–120), `email`, `password` (min 8) |
-| `mfaEnrollSchema` | `email`, `password` |
-| `mfaConfirmSchema` | `email`, `token` (6 digits) |
-
-### Accounts (`accounts.schema.ts`)
-| Schema | Fields |
-|--------|--------|
-| `accountsQuerySchema` | `page?` (1–1000), `pageSize?` (1–100), `status?`, `plan?`, `search?` |
-
-### Export (`export.schema.ts`)
-| Schema | Fields |
-|--------|--------|
-| `exportQuerySchema` | `format?` (`csv`\|`json`), `range?` |
-
-### Shared (`shared/middleware/validation.ts`)
-| Schema | Fields |
-|--------|--------|
-| `dateRangeSchema` | `start?` (datetime), `end?` (datetime) |
-
-## 3. Relationships (logical)
 ```
-Company 1──* AdminUser
-Company 1──* Customer
-Company 1──* MRRSnapshot
-Company 1──* Event / HealthScore / ChurnEvent
-Customer 1──* Subscription   (via external_id → stripe_subscription_id)
-Customer 1──* HealthScore    (append-only; read latest per customer)
-Customer 1──* ChurnEvent
+                      ┌───────────────────┐
+                      │      Company      │
+                      └─────────┬─────────┘
+                                │ 1:N
+     ┌──────────┬──────────┬────┴─────┬──────────┬──────────┬──────────┐
+     ▼          ▼          ▼          ▼          ▼          ▼          ▼
+┌─────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+│ Admin   │ │Customer│ │ Event  │ │  MRR   │ │ Churn  │ │ Health │ │ Saved  │
+│ User    │ │        │ │        │ │Snapshot│ │ Event  │ │ Score  │ │Segment │
+└────┬────┘ └───┬────┘ └────────┘ └────────┘ └────────┘ └────────┘ └────────┘
+     │ 1:N      │ 1:N
+     ▼          ├──────────┬──────────┐
+┌─────────┐     ▼          ▼          ▼
+│Password │ ┌────────┐ ┌────────┐ ┌────────┐
+│ Reset   │ │Subscri-│ │Customer│ │  Event │
+│ Token   │ │ ption  │ │ Note   │ │(assoc) │
+└─────────┘ └────────┘ └────────┘ └────────┘
 ```
 
-## 4. Notes
-- `prisma/schema.prisma` is **cross-domain** and intentionally not split per module.
-- All money values are stored as integer **cents**.
-- `HealthScore` is append-only per `computed_at`; the service dedupes to the latest score per customer
-  in a single query (no N+1 `findFirst` per customer).
-- `ChurnEvent.churned_at` is the field filtered for the rolling-30-day churn rate window in `analytics.service.ts`.
-- Datasource is `sqlite` for local dev; swap to `postgresql` for production by updating `DATABASE_URL`.
+---
+
+## 2. Model Specifications
+
+### A. Core Tenant Models
+
+#### `Company`
+The root tenant model for multi-tenant data isolation.
+| Field | Type | Attributes | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `String` | `@id @default(uuid())` | Unique company tenant identifier |
+| `name` | `String` | | Display name of the tenant organization |
+| `stripe_id` | `String?` | `@unique` | Optional external Stripe Account ID |
+| `plan_tier` | `String` | `@default("free")` | Platform subscription tier (`free`, `starter`, `pro`, `enterprise`) |
+| `slack_webhook_url` | `String?` | | Webhook URL for Slack alerts |
+| `alert_email` | `String?` | | Email address for security & billing alerts |
+| `created_at` | `DateTime` | `@default(now())` | Account creation timestamp |
+
+#### `AdminUser`
+Team members with role-based access permissions.
+| Field | Type | Attributes | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `String` | `@id @default(uuid())` | Primary key |
+| `company_id` | `String` | Relation to `Company` | Parent tenant reference |
+| `email` | `String` | | Admin login email address |
+| `password_hash` | `String` | | bcrypt (12 rounds) hashed password |
+| `role` | `String` | `@default("ADMIN")` | RBAC role (`OWNER`, `ADMIN`, `ANALYST`, `DEVELOPER`) |
+| `mfa_secret` | `String?` | | Encrypted TOTP secret key |
+| `mfa_enabled` | `Boolean` | `@default(false)` | Two-Factor Authentication flag |
+
+*Indexes*: `@@unique([company_id, email])`, `@@index([email])`
+
+---
+
+### B. Customer CRM & Revenue Models
+
+#### `Customer`
+End-user accounts managed by the SaaS tenant.
+| Field | Type | Attributes | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `String` | `@id @default(uuid())` | Primary key |
+| `company_id` | `String` | Relation to `Company` | Parent tenant reference |
+| `external_id` | `String?` | | External provider ID (e.g. Stripe `cus_xxx`) |
+| `email` | `String` | | Customer contact email |
+| `name` | `String` | | Customer organization/person name |
+| `plan` | `String` | | Current subscription plan (`starter`, `pro`, `enterprise`) |
+| `status` | `String` | | Lifecycle status (`active`, `past_due`, `canceled`, `trialing`) |
+| `mrr_cents` | `Int` | `@default(0)` | Monthly Recurring Revenue in cents USD |
+| `billing_cycle` | `String` | | Payment frequency (`monthly`, `yearly`) |
+| `trial_ends_at` | `DateTime?` | | Trial expiration date |
+
+*Indexes*: `@@unique([company_id, external_id])`, `@@index([company_id])`, `@@index([status])`
+
+#### `Subscription`
+Detailed subscription items linked to customers.
+| Field | Type | Attributes | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `String` | `@id @default(uuid())` | Primary key |
+| `customer_id` | `String` | Relation to `Customer` | Parent customer reference |
+| `stripe_subscription_id` | `String?` | `@unique` | Stripe subscription ID (`sub_xxx`) |
+| `plan` | `String` | | Plan identifier |
+| `mrr_cents` | `Int` | | Subscription MRR in cents |
+| `status` | `String` | | Status (`active`, `past_due`, `canceled`) |
+| `current_period_start` | `DateTime` | | Billing period start date |
+| `current_period_end` | `DateTime` | | Billing period end date |
+| `canceled_at` | `DateTime?` | | Cancellation timestamp |
+
+---
+
+### C. Financial & Analytics Time-Series Models
+
+#### `MRRSnapshot`
+Daily aggregated revenue snapshots for MRR waterfall charting.
+| Field | Type | Attributes | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `String` | `@id @default(uuid())` | Primary key |
+| `company_id` | `String` | Relation to `Company` | Parent tenant reference |
+| `date` | `DateTime` | | Normalized UTC midnight date |
+| `mrr_cents` | `Int` | | Total active MRR at date |
+| `new_mrr_cents` | `Int` | `@default(0)` | New customer acquisition MRR |
+| `expansion_mrr_cents` | `Int` | `@default(0)` | Existing customer upgrade MRR |
+| `contraction_mrr_cents`| `Int` | `@default(0)` | Existing customer downgrade MRR |
+| `churned_mrr_cents` | `Int` | `@default(0)` | Lost MRR from cancellations |
+| `customer_count` | `Int` | `@default(0)` | Total active customer count |
+
+*Indexes*: `@@unique([company_id, date])`, `@@index([company_id, date(sort: Desc)])`
+
+#### `HealthScore`
+Computed customer retention and health scores.
+| Field | Type | Attributes | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `String` | `@id @default(uuid())` | Primary key |
+| `company_id` | `String` | Relation to `Company` | Parent tenant reference |
+| `customer_id` | `String` | Relation to `Customer` | Target customer reference |
+| `score` | `Int` | | Computed health score (0–100) |
+| `signals` | `String` | | JSON string of signal breakdown |
+| `computed_at` | `DateTime` | `@default(now())` | Calculation timestamp |
+
+*Indexes*: `@@index([company_id])`, `@@index([customer_id])`
+
+#### `Event`
+User activity and product interaction events.
+| Field | Type | Attributes | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `String` | `@id @default(uuid())` | Primary key |
+| `company_id` | `String` | Relation to `Company` | Parent tenant reference |
+| `customer_id` | `String?` | Relation to `Customer` | Optional associated customer |
+| `name` | `String` | | Event name (e.g. `signup`, `activation`, `payment_failed`) |
+| `properties` | `String` | `@default("{}")` | JSON metadata properties |
+| `occurred_at` | `DateTime` | `@default(now())` | Event timestamp |
+
+*Indexes*: `@@index([company_id, occurred_at(sort: Desc)])`, `@@index([customer_id])`
+
+---
+
+### D. Security, Settings & Customization Models
+
+#### `ApiKey`
+Developer API authentication keys.
+| Field | Type | Attributes | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `String` | `@id @default(uuid())` | Primary key |
+| `company_id` | `String` | Relation to `Company` | Parent tenant reference |
+| `name` | `String` | | Descriptive key name |
+| `key_prefix` | `String` | | Obfuscated key prefix (e.g. `pulse_live_a1b2...`) |
+| `hashed_key` | `String` | `@unique` | SHA-256 hash of the full raw API key |
+| `scopes` | `String` | `@default("read:analytics")` | Comma-separated scope permissions |
+| `last_used_at` | `DateTime?` | | Timestamp of last API invocation |
+| `revoked_at` | `DateTime?` | | Revocation timestamp |
+
+#### `SavedSegment`
+Saved customer directory filter views.
+| Field | Type | Attributes | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `String` | `@id @default(uuid())` | Primary key |
+| `company_id` | `String` | Relation to `Company` | Parent tenant reference |
+| `name` | `String` | | Segment preset name |
+| `filters` | `String` | | JSON string of filter parameters |
+| `created_at` | `DateTime` | `@default(now())` | Creation timestamp |
+
+#### `CustomerNote`
+Internal team CRM notes log per customer.
+| Field | Type | Attributes | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `String` | `@id @default(uuid())` | Primary key |
+| `company_id` | `String` | Relation to `Company` | Parent tenant reference |
+| `customer_id` | `String` | Relation to `Customer` | Target customer reference |
+| `author` | `String` | | Email of authoring team member |
+| `body` | `String` | | Note text content |
+| `created_at` | `DateTime` | `@default(now())` | Creation timestamp |
+
+---
+
+## 3. Database Indexes & Query Optimization Strategy
+
+1. **Multi-Tenant Compound Indexes**: All core entities use `company_id` as the primary index prefix (`@@index([company_id])`), enabling $O(\log N)$ B-Tree lookup performance under high multi-tenant query volume.
+2. **Time-Series Ordering Indexes**: Tables with heavy time-range queries (`MRRSnapshot`, `Event`) feature compound descending time indexes (`@@index([company_id, occurred_at(sort: Desc)])`).
+3. **Unique Security Lookups**: Sensitive tokens (`ApiKey.hashed_key`, `PasswordResetToken.token`) use `@unique` constraints for $O(1)$ Hash / Unique B-Tree indexing.

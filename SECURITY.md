@@ -1,66 +1,65 @@
-# Security Model
+# 🔒 Pulse SaaS — Security Model & Defense-in-Depth
 
-Pulse is designed to be deployed **inside the client's own infrastructure** (Option A/B),
-so security is defense-in-depth across the stack.
+Pulse SaaS is engineered for enterprise security, strict multi-tenant isolation, and zero-trust authentication across all application layers.
 
-## Secrets & Configuration
-- All secrets (`JWT_SECRET`, `JWT_REFRESH_SECRET`, `STRIPE_SECRET_KEY`,
-  `STRIPE_WEBHOOK_SECRET`, `COOKIE_SECRET`) are loaded through `shared/lib/config.ts`
-  via `requireSecret()`.
-- **In production**: any missing secret throws at boot — the server refuses to start
-  with an insecure fallback. This applies to all 5 secrets without exception.
-- **In development**: a warning is logged and a safe-for-dev default is used.
-- `app.ts` reads `config.cookieSecret` (not `process.env.COOKIE_SECRET` directly)
-  so the fail-fast guarantee is never bypassed.
+---
 
-## Authentication & Sessions
-- JWT access tokens (15 min) stored in **HttpOnly, Secure, SameSite=Strict** cookies.
-- Refresh tokens (7 d) rotated via `tokenRefreshMiddleware` in `auth.middleware.ts`.
-- No token ever reaches JavaScript — XSS cannot exfiltrate it.
-- Login input validated with Zod; constant-time dummy `bcrypt.compare` on "user not
-  found" path prevents user-enumeration via timing.
+## 1. Authentication & Session Security
 
-## Rate Limiting
-- Global limiter: 100 req/min/IP on `/api/*`.
-- Dedicated auth limiter: 10 req/win on `/api/auth/login` and `/api/auth/register`
-  to blunt credential-stuffing and brute-force attacks.
-- Both limiters are backed by a **Redis store** (`shared/lib/rateLimitStore.ts`) so
-  counters are shared across all API instances. Fail-open design: if Redis is
-  unreachable, each instance falls back to its own in-memory counter rather than
-  blocking all traffic.
+### Dual JWT Cookie Architecture
+- **Access Tokens**: Short-lived (15 minutes), signed with `JWT_SECRET`.
+- **Refresh Tokens**: Long-lived (7 days), signed with `JWT_REFRESH_SECRET`, stored in `HttpOnly, Secure, SameSite=Strict` cookies.
+- **Silent Rotation**: `tokenRefreshMiddleware` automatically rotates access tokens before expiration without client disruption.
+- **XSS Protection**: Tokens are never stored in `localStorage` or accessible via JavaScript.
 
-## Transport & Headers
-- `helmet` enforces: CSP (`default-src 'self'`), `X-Content-Type-Options: nosniff`,
-  `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, HSTS (1 y, includeSubDomains, preload).
-- CORS restricted to `CLIENT_ORIGIN`; credentials mode enabled for cookie transport.
+### Scoped Developer API Keys
+- **SHA-256 Hashing**: API keys are generated as `pulse_live_<hex>` and hashed via SHA-256 (`hashed_key`). Plaintext keys are shown only once upon creation.
+- **Bearer Token Middleware**: `apiKeyMiddleware` authenticates `Authorization: Bearer pulse_live_xxx` requests, populating tenant context (`req.companyId`) and validating key scopes.
 
-## Input Validation
-- All query/body params validated with Zod schemas.
-- DB access only via Prisma (parameterized queries) — no raw SQL, no string interpolation.
-- `page`/`pageSize`/`status`/`plan` bounded and enumerated before reaching the DB.
+### Timing Attack & Enumeration Defense
+- **Constant-Time CPU Work**: Login executes a pre-computed `bcrypt.compare` on "user not found" paths (`consumeCpu()`), making valid vs. invalid email check response times indistinguishable.
 
-## Webhooks
-- Stripe webhooks verified with `stripe.webhooks.constructEvent` using `STRIPE_WEBHOOK_SECRET`.
-  Invalid signatures are rejected with 400 before any DB write.
-- Webhook route receives the **raw Buffer** (`express.raw`) — mounted before `express.json()`
-  so signature verification is never broken by body pre-parsing.
+### Two-Factor Authentication (2FA)
+- **TOTP MFA**: Integrated 2FA using `speakeasy` base32 TOTP secret verification required at sign-in when `mfa_enabled = true`.
 
-## Multi-tenancy
-- Every query is scoped by `companyId` (from the verified JWT). One company cannot read
-  another's rows.
-- `MRRSnapshot` unique constraint is `(company_id, date)` — prevents cross-tenant date
-  conflicts that would have caused upsert failures under the old single-column `@@unique([date])`.
+---
 
-## Kubernetes / Deployment
-- Containers run as non-root (`runAsNonRoot`, `runAsUser: 1000`), no privilege escalation.
-- Secrets are injected via Kubernetes `Secret` / Docker env — never baked into images.
-- TLS terminated at Ingress via cert-manager; HTTP→HTTPS redirect enforced.
+## 2. Multi-Tenant Data Isolation
 
-## MFA (enabled per-user)
-- TOTP via `speakeasy`: enroll sets `mfa_secret` (base32), confirm enables `mfa_enabled`.
-- Login requires a valid 6-digit TOTP token when `mfa_enabled = true`.
+- **Tenant Scope Enforcement**: All Prisma database queries enforce `where: { company_id: req.companyId }` extracted from authenticated sessions.
+- **Database Composite Constraints**: `MRRSnapshot` enforces `@@unique([company_id, date])` and `Customer` enforces `@@unique([company_id, external_id])`, preventing cross-tenant collisions.
 
-## Operational
-- Rotate `JWT_SECRET`, `JWT_REFRESH_SECRET`, `COOKIE_SECRET` on a schedule.
-- Database must use TLS; restrict inbound to the API's network only.
-- Review Prisma migrations before deploying schema changes to production.
+---
+
+## 3. Rate Limiting & Denial-of-Service Defense
+
+- **Global API Rate Limiter**: 100 requests / minute per IP on `/api/*`.
+- **Dedicated Auth Rate Limiter**: 10 requests / minute per IP on `/api/auth/login` and `/api/auth/register` to prevent brute-force attacks.
+- **Redis-Backed Store**: Multi-replica rate limiting supported via `RedisRateLimitStore` (`REDIS_URL`).
+- **Fail-Open Fault Tolerance**: If Redis is unreachable, the rate-limiter falls back to local memory without blocking valid application traffic.
+- **Admin Lockout Resets**: Security admins can view locked-out IPs and reset rate limits inside `Settings > Security Audit Logs`.
+
+---
+
+## 4. Input Validation & Webhook Verification
+
+- **Strict Schema Validation**: All request queries and bodies are parsed with Zod schemas (`validateQuery`, `validateBody`).
+- **Parameterized SQL Queries**: All database operations go through Prisma ORM (parameterized SQL statements only — zero raw SQL string concatenation).
+- **Stripe Webhook Signatures**: Raw body buffer parsing (`express.raw()`) is executed before JSON parsing. Webhooks verify signatures via `stripe.webhooks.constructEvent` using `STRIPE_WEBHOOK_SECRET`.
+
+---
+
+## 5. Security Audit Logging
+
+- **Audit Service (`audit.service.ts`)**: Automatically logs sensitive administrative actions (`LOGIN`, `PASSWORD_RESET`, `EXPORT_DATA`, `REVOKE_API_KEY`, `INVITE_ADMIN`) with user email, action name, IP address, user-agent, and metadata.
+- **Audit Viewer**: Pageable audit log interface in `Settings > Audit Logs`.
+
+---
+
+## 6. Enterprise Security Checklist
+
+- [x] All 5 production secrets enforced at boot via `requireSecret()`.
+- [x] JWT access & refresh tokens transmitted exclusively in `HttpOnly`, `SameSite=Strict` cookies.
+- [x] Scoped API keys hashed with SHA-256 (`api-key.middleware.ts`).
+- [x] Password reset links generated with 64-char crypto-random tokens and 1-hour expiration.
+- [x] Non-root container security context (`runAsUser: 1000`) in Docker & Kubernetes manifests.
