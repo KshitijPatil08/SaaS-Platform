@@ -7,6 +7,7 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 15_000, // 15 second timeout — prevents infinite spinners on slow/unresponsive API
 })
 
 // Centralized error handling
@@ -17,6 +18,16 @@ api.interceptors.response.use(
       // Token expired, invalid, or missing — client should redirect to login
       window.dispatchEvent(new CustomEvent('auth:unauthorized'))
     }
+
+    // Surface timeout errors with a user-friendly message
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      window.dispatchEvent(
+        new CustomEvent('api:timeout', {
+          detail: { url: error.config?.url },
+        })
+      )
+    }
+
     return Promise.reject(error)
   }
 )

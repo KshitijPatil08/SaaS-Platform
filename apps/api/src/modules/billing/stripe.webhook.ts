@@ -8,26 +8,39 @@ import { kpiCache } from '../shared/lib/kpi-cache'
 
 const router = express.Router()
 
-// Helper: trigger post-webhook background updates (MRR snapshot, health score, cache invalidation)
-async function triggerPostWebhookUpdates(customerId: string) {
-  const customer = await prisma.customer.findFirst({
+/**
+ * Resolves customer record from external Stripe customer ID.
+ * Returns null if customer not found — caller must guard.
+ */
+async function resolveCustomer(customerId: string) {
+  return prisma.customer.findFirst({
     where: { external_id: customerId },
     select: { id: true, company_id: true, name: true, mrr_cents: true },
   })
-
-  if (!customer) return null
-
-  // 1. Recompute current MRR snapshot
-  await billingService.snapshotCurrentMrr(customer.company_id)
-
-  // 2. Recompute health score for this customer
-  await healthScoreService.computeScoreForCustomer(customer.id, customer.company_id)
-
-  // 3. Invalidate KPI cache
-  kpiCache.invalidate(`kpis_${customer.company_id}`)
-
-  return customer
 }
+
+/**
+ * Schedules post-webhook side-effects as a fire-and-forget background task.
+ *
+ * Stripe requires HTTP 200 within 30s or it retries. Heavy DB writes
+ * (MRR snapshot, health score) must NOT block the webhook response.
+ * setImmediate() yields the event loop so Express can flush the response first.
+ */
+function schedulePostWebhookUpdates(customerId: string): void {
+  setImmediate(async () => {
+    try {
+      const customer = await resolveCustomer(customerId)
+      if (!customer) return
+
+      await billingService.snapshotCurrentMrr(customer.company_id)
+      await healthScoreService.computeScoreForCustomer(customer.id, customer.company_id)
+      kpiCache.invalidate(`kpis_${customer.company_id}`)
+    } catch (err) {
+      console.error('[webhook] Background post-webhook update failed:', err)
+    }
+  })
+}
+
 
 // app.ts mounts this router at /webhooks/stripe and applies express.raw()
 router.post('/', async (req, res) => {
@@ -61,19 +74,20 @@ router.post('/', async (req, res) => {
           canceledAt: sub.canceled_at,
         })
 
-        await triggerPostWebhookUpdates(customerId)
+        // Non-blocking: MRR snapshot + health score update run after response
+        schedulePostWebhookUpdates(customerId)
         break
       }
       case 'customer.subscription.deleted': {
         const sub = event.data.object as Stripe.Subscription
         const customerId = extractCustomerId(sub.customer)
-        
+
         await billingService.markSubscriptionCanceled(sub.id)
 
         if (customerId) {
-          const customer = await triggerPostWebhookUpdates(customerId)
+          // Resolve customer synchronously — needed to log the ChurnEvent
+          const customer = await resolveCustomer(customerId)
           if (customer) {
-            // Record ChurnEvent for analytics
             await prisma.churnEvent.create({
               data: {
                 company_id: customer.company_id,
@@ -83,13 +97,12 @@ router.post('/', async (req, res) => {
                 churned_at: new Date(),
               },
             })
-
             console.warn(
-              `[ALERT] Churn Event Recorded: Customer "${customer.name}" (${customer.id}) canceled. Lost MRR: $${(
-                (customer.mrr_cents || 0) / 100
-              ).toFixed(2)}`
+              `[ALERT] Churn: "${customer.name}" canceled. Lost MRR: $${((customer.mrr_cents || 0) / 100).toFixed(2)}`
             )
           }
+          // Side-effects fire after response
+          schedulePostWebhookUpdates(customerId)
         }
         break
       }
@@ -97,32 +110,25 @@ router.post('/', async (req, res) => {
         const invoice = event.data.object as Stripe.Invoice
         const customerId = extractCustomerId(invoice.customer)
         if (!customerId) break
-        
+
         await billingService.activateCustomerOnInvoice(customerId)
-        await triggerPostWebhookUpdates(customerId)
+        schedulePostWebhookUpdates(customerId)
         break
       }
       case 'invoice.payment_failed': {
-        // Most operationally critical event: a customer's payment has failed.
-        // Steps: mark past_due, recompute health (score will drop), emit event for dunning.
         const invoice = event.data.object as Stripe.Invoice
         const customerId = extractCustomerId(invoice.customer)
         if (!customerId) break
 
-        // Mark customer as past_due
+        // Mark past_due synchronously — this is the critical state change
         await prisma.customer.updateMany({
           where: { external_id: customerId },
           data: { status: 'past_due' },
         })
 
-        // Find customer record for follow-up operations
-        const customer = await prisma.customer.findFirst({
-          where: { external_id: customerId },
-          select: { id: true, company_id: true, name: true, email: true, mrr_cents: true },
-        })
-
+        // Emit dunning event synchronously so the record exists immediately
+        const customer = await resolveCustomer(customerId)
         if (customer) {
-          // Emit a payment_failed event so dunning analytics can track it
           await prisma.event.create({
             data: {
               company_id: customer.company_id,
@@ -136,16 +142,11 @@ router.post('/', async (req, res) => {
               }),
             },
           })
-
-          // Recompute health score (will drop due to payment_status signal)
-          await healthScoreService.computeScoreForCustomer(customer.id, customer.company_id)
-          await billingService.snapshotCurrentMrr(customer.company_id)
-          kpiCache.invalidate(`kpis_${customer.company_id}`)
-
           console.warn(
-            `[ALERT] Payment Failed: Customer "${customer.name}" <${customer.email}> ` +
-            `is now PAST DUE. MRR at risk: $${((customer.mrr_cents || 0) / 100).toFixed(2)}`
+            `[ALERT] Payment Failed: "${customer.name}" <${(customer as any).email}> MRR at risk: $${((customer.mrr_cents || 0) / 100).toFixed(2)}`
           )
+          // Heavy side-effects fire after response returns
+          schedulePostWebhookUpdates(customerId)
         }
         break
       }

@@ -1,6 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 
+// Align client-side stale time with server cache TTL (server caches for 60s).
+// Using 55s ensures the client re-fetches just before the server cache expires.
+// refetchOnWindowFocus: false prevents 6 simultaneous API calls on every tab switch.
+const KPI_QUERY_OPTS = {
+  staleTime: 55 * 1000,
+  refetchOnWindowFocus: false,
+} as const
+
 export interface KpiSummary {
   mrr_cents: number
   customer_count: number
@@ -17,6 +25,7 @@ export function useKpis() {
       const { data } = await api.get('/api/kpis')
       return data
     },
+    ...KPI_QUERY_OPTS,
   })
 }
 
@@ -37,6 +46,7 @@ export function useMrrSeries() {
       const { data } = await api.get('/api/mrr')
       return data
     },
+    ...KPI_QUERY_OPTS,
   })
 }
 
@@ -52,6 +62,7 @@ export function useHealth() {
       const { data } = await api.get('/api/health')
       return data
     },
+    ...KPI_QUERY_OPTS,
   })
 }
 
@@ -71,6 +82,7 @@ export function useFunnel() {
       const { data } = await api.get('/api/funnel')
       return data
     },
+    ...KPI_QUERY_OPTS,
   })
 }
 
@@ -109,6 +121,8 @@ export function useAccounts(page = 1, pageSize = 10, status?: string, plan?: str
       const { data } = await api.get(`/api/accounts?${params.toString()}`)
       return data
     },
+    staleTime: 30 * 1000, // accounts list changes more often — 30s stale time
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -129,6 +143,8 @@ export function useAccountEvents(accountId: string | null) {
       return data
     },
     enabled: !!accountId,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -149,6 +165,7 @@ export function useChurnBreakdown() {
       const { data } = await api.get('/api/churn/breakdown')
       return data
     },
+    ...KPI_QUERY_OPTS,
   })
 }
 
@@ -159,6 +176,8 @@ export function useProfile() {
       const { data } = await api.get('/api/auth/profile')
       return data
     },
+    staleTime: 5 * 60 * 1000, // profile rarely changes — 5 min stale time
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -169,6 +188,8 @@ export function useBillingStatus() {
       const { data } = await api.get('/api/vendor-billing/status')
       return data
     },
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -188,5 +209,6 @@ export function useCohorts() {
       const { data } = await api.get('/api/analytics/cohorts')
       return data
     },
+    ...KPI_QUERY_OPTS,
   })
 }

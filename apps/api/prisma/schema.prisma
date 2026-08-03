@@ -38,6 +38,10 @@ model Company {
   mrr_goal      MrrGoal?
   customer_notes CustomerNote[]
   saved_segments SavedSegment[]
+
+  // Custom health score signal weights (JSON: { paymentWeightPct, accountAgeWeightPct, ... })
+  // Persisted here so rules survive server restarts and multi-instance deployments.
+  health_score_config String @default("{}")
 }
 
 
@@ -114,6 +118,10 @@ model Customer {
   @@unique([company_id, external_id])
   @@index([company_id])
   @@index([status])
+  // Compound indexes for the most frequent analytics query patterns:
+  @@index([company_id, status])      // customer list filter by status (every page load)
+  @@index([company_id, mrr_cents])   // dunning: ORDER BY mrr_cents DESC
+  @@index([company_id, created_at])  // cohort/retention: WHERE company_id ORDER BY created_at
 }
 
 model Subscription {
@@ -145,6 +153,8 @@ model Event {
 
   @@index([company_id, occurred_at(sort: Desc)])
   @@index([customer_id])
+  // Funnel queries group by (company_id, name) — this index covers them
+  @@index([company_id, name])
 }
 
 model MRRSnapshot {
@@ -264,4 +274,19 @@ model SavedSegment {
   created_at DateTime @default(now())
 
   @@index([company_id])
+}
+
+// ─── Stripe Webhook Idempotency ───────────────────────────────────────────────
+// Stores processed Stripe event IDs to prevent duplicate handling on retries.
+// Stripe guarantees at-least-once delivery — this guard prevents double-downgrade
+// when subscription.deleted fires twice in rapid succession.
+
+model ProcessedWebhookEvent {
+  id         String   @id @default(uuid())
+  event_id   String   @unique  // Stripe event ID (evt_xxx)
+  event_type String
+  processed_at DateTime @default(now())
+
+  @@index([event_id])
+  @@index([processed_at])
 }

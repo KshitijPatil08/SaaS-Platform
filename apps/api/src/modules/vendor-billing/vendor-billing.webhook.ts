@@ -49,6 +49,18 @@ router.post('/', async (req: Request, res: Response) => {
   }
 
   try {
+    // ── Idempotency guard ────────────────────────────────────────────────────
+    // Stripe guarantees at-least-once delivery. If the same event fires twice,
+    // we must not process it again (e.g., subscription.deleted should not
+    // double-downgrade a company that already re-subscribed).
+    const alreadyProcessed = await prisma.processedWebhookEvent.findUnique({
+      where: { event_id: event.id },
+    })
+    if (alreadyProcessed) {
+      console.log(`[vendor-webhook] Duplicate event ${event.id} — already processed, skipping`)
+      return res.json({ received: true })
+    }
+
     switch (event.type) {
       // ── First successful payment after Checkout ──────────────────────────
       case 'checkout.session.completed': {
@@ -138,6 +150,11 @@ router.post('/', async (req: Request, res: Response) => {
         // Unhandled vendor event — not an error
         break
     }
+
+    // Mark this event as processed so retries are no-ops
+    await (prisma as any).processedWebhookEvent.create({
+      data: { event_id: event.id, event_type: event.type },
+    })
 
     return res.json({ received: true })
   } catch (err) {

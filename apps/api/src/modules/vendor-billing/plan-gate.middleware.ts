@@ -10,6 +10,7 @@
 
 import type { Request, Response, NextFunction } from 'express'
 import { prisma } from '../shared/lib/prisma'
+import { kpiCache } from '../shared/lib/kpi-cache'
 import { PLAN_LIMITS, withinCustomerCap } from './plan-limits'
 import type { PlanTier } from './plan-limits'
 
@@ -32,21 +33,32 @@ export async function planGate(
   }
 
   try {
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: {
-        plan_tier: true,
-        _count: { select: { customers: { where: { status: 'active' } } } },
-      },
-    })
+    // Cache the plan check for 5 minutes — plan tier changes only on Stripe webhooks
+    const cacheKey = `plan_gate_${companyId}`
+    let cached = kpiCache.get<{ tier: PlanTier; currentCount: number }>(cacheKey)
 
-    if (!company) {
-      res.status(401).json({ error: 'Company not found' })
-      return
+    if (!cached) {
+      const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: {
+          plan_tier: true,
+          _count: { select: { customers: { where: { status: 'active' } } } },
+        },
+      })
+
+      if (!company) {
+        res.status(401).json({ error: 'Company not found' })
+        return
+      }
+
+      cached = {
+        tier: ((company.plan_tier as PlanTier) ?? 'free'),
+        currentCount: company._count.customers,
+      }
+      kpiCache.set(cacheKey, cached, 5 * 60 * 1000) // 5 min TTL
     }
 
-    const tier = (company.plan_tier as PlanTier) ?? 'free'
-    const currentCount = company._count.customers
+    const { tier, currentCount } = cached
     const limits = PLAN_LIMITS[tier]
 
     if (!withinCustomerCap(tier, currentCount)) {
@@ -62,7 +74,7 @@ export async function planGate(
       return
     }
 
-    // Attach plan metadata to request for downstream use (optional)
+    // Attach plan metadata for downstream middleware (exportGate reads this)
     ;(req as any).planTier = tier
     ;(req as any).planLimits = limits
 
@@ -89,12 +101,18 @@ export async function exportGate(
   }
 
   try {
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { plan_tier: true },
-    })
+    // Re-use the tier already resolved by planGate (if chained) — avoids a second DB query.
+    // Fall back to DB only when exportGate is used standalone (not after planGate).
+    let tier = (req as any).planTier as PlanTier | undefined
 
-    const tier = ((company?.plan_tier) as PlanTier) ?? 'free'
+    if (!tier) {
+      const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { plan_tier: true },
+      })
+      tier = ((company?.plan_tier) as PlanTier) ?? 'free'
+    }
+
     const limits = PLAN_LIMITS[tier]
 
     if (!limits.exports) {

@@ -119,7 +119,7 @@ import inAppNotificationsRouter from './modules/notifications/notifications.rout
 import dunningRouter from './modules/billing/dunning.routes'
 import webhookSimulatorRouter from './modules/billing/webhook-simulator.routes'
 import healthRulesRouter from './modules/analytics/health-rules.routes'
-import csvImportRouter from './modules/export/csv-import.routes'
+import csvImportRouter from './modules/accounts/csv-import.routes'
 import mrrGoalRouter from './modules/analytics/mrr-goal.routes'
 import customerNotesRouter from './modules/accounts/customer-notes.routes'
 import savedSegmentsRouter from './modules/accounts/saved-segments.routes'
@@ -144,7 +144,7 @@ app.use('/api/health-rules', verifyJwt, healthRulesRouter)
 app.use('/api/churn', verifyJwt, planGate, churnRouter)
 app.use('/api/analytics', verifyJwt, planGate, cohortsRouter)
 app.use('/api/export', verifyJwt, exportGate, exportRouter)
-app.use('/api/export', verifyJwt, exportGate, csvImportRouter)
+app.use('/api/import', verifyJwt, csvImportRouter)
 app.use('/api/audit-logs', verifyJwt, auditRouter)
 app.use('/api/api-keys', verifyJwt, apiKeysRouter)
 app.use('/api/notifications', verifyJwt, notificationsRouter)

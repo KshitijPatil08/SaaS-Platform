@@ -68,4 +68,33 @@ export const accountsService = {
       take: limit,
     })
   },
+
+  /**
+   * Partially updates a customer record.
+   * Always scopes the update to (id, company_id) to prevent cross-tenant writes.
+   * Returns the updated record or null if not found.
+   */
+  async updateById(
+    id: string,
+    companyId: string,
+    data: Partial<{
+      name: string
+      plan: string
+      status: string
+      mrr_cents: number
+      billing_cycle: string
+    }>
+  ) {
+    // First verify the customer belongs to this company (prevents cross-tenant writes)
+    const exists = await prisma.customer.findFirst({
+      where: { id, company_id: companyId },
+      select: { id: true },
+    })
+    if (!exists) return null
+
+    return prisma.customer.update({
+      where: { id },
+      data,
+    })
+  },
 }
