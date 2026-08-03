@@ -134,13 +134,15 @@ export const StatusPage: React.FC = () => {
               { id: 'webhooks', name: 'Stripe Webhook Listener', desc: 'Real-time billing event ingestion worker' },
             ].map(svc => {
               const check = data?.checks[svc.id] ?? { status: isOperational ? 'operational' : 'degraded', latencyMs: 12 }
+              const isServiceOperational = check.status === 'operational'
+              const dotClass = isServiceOperational ? 'bg-emerald-400 shadow-emerald-500/50' : 'bg-rose-400 shadow-rose-500/50'
               return (
                 <div
                   key={svc.id}
                   className="flex items-center justify-between p-4 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-slate-700 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-500/50" />
+                    <span className={`w-2.5 h-2.5 rounded-full ${dotClass} shadow-sm`} />
                     <div>
                       <p className="text-sm font-semibold text-slate-100">{svc.name}</p>
                       <p className="text-xs text-slate-400">{svc.desc}</p>
@@ -151,8 +153,8 @@ export const StatusPage: React.FC = () => {
                     {check.latencyMs !== undefined && (
                       <span className="text-[11px] font-mono text-slate-500">{check.latencyMs}ms</span>
                     )}
-                    <span className="px-2.5 py-1 bg-emerald-950/60 text-emerald-400 border border-emerald-800/50 rounded-lg text-xs font-semibold">
-                      Operational
+                    <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${isServiceOperational ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/50' : 'bg-rose-950/60 text-rose-400 border-rose-800/50'}`}>
+                      {isServiceOperational ? 'Operational' : 'Degraded'}
                     </span>
                   </div>
                 </div>

@@ -33,8 +33,10 @@ dotenv.config()
 const app = express()
 
 // Initialize background workers on boot
-startSnapshotWorker()        // daily MRR snapshot waterfall calculations
-startHealthScoreWorker()     // nightly health score recomputation for all customers
+if (process.env.NODE_ENV !== 'test') {
+  startSnapshotWorker()        // daily MRR snapshot waterfall calculations
+  startHealthScoreWorker()     // nightly health score recomputation for all customers
+}
 
 // Security Headers
 app.use(helmet({
@@ -178,11 +180,12 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 })
 
 const PORT = process.env.PORT || 5000
-app.listen(PORT, () => {
-  console.log(`API server running on port ${PORT}`)
-  startSnapshotWorker()
-  // Warm up KPI cache 3s after boot so first requests don't cold-start the DB
-  setTimeout(() => warmUpCache(prisma).catch(console.warn), 3000)
-})
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`API server running on port ${PORT}`)
+    // Warm up KPI cache 3s after boot so first requests don't cold-start the DB
+    setTimeout(() => warmUpCache(prisma).catch(console.warn), 3000)
+  })
+}
 
 export default app

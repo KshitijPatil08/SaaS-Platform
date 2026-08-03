@@ -100,16 +100,9 @@ router.post('/checkout', async (req: Request, res: Response) => {
     return res.json({ url: session.url })
   } catch (err: any) {
     console.error('[vendor-billing/checkout] Stripe error:', err?.message || err)
-    // Dev/Demo fallback: if Stripe keys are placeholder or non-functional, perform immediate plan upgrade
-    try {
-      await prisma.company.update({
-        where: { id: companyId },
-        data: { plan_tier: plan.toLowerCase() },
-      })
-      return res.json({ url: `${config.clientOrigin}/billing?success=true` })
-    } catch (dbErr) {
-      return res.status(500).json({ error: 'Failed to update plan status' })
-    }
+    return res.status(502).json({
+      error: 'Could not create a Stripe checkout session. Please verify billing configuration and try again.',
+    })
   }
 })
 

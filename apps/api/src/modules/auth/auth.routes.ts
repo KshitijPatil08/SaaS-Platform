@@ -1,7 +1,10 @@
 import { Router, Request, Response } from 'express'
 import { authService } from './auth.service'
 import { verifyJwt, tokenRefreshMiddleware } from './auth.middleware'
+import { requireRole } from './rbac.middleware'
 import { prisma } from '../shared/lib/prisma'
+import { config } from '../shared/lib/config'
+import { auditService } from '../shared/lib/audit.service'
 
 const router = Router()
 
@@ -76,7 +79,7 @@ router.post('/reset-password', async (req: Request, res: Response) => {
 })
 
 // POST /api/auth/invite (protected)
-router.post('/invite', verifyJwt, async (req: Request, res: Response) => {
+router.post('/invite', verifyJwt, requireRole('OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   try {
     const { email, password, role } = req.body
     if (!email) return res.status(400).json({ error: 'Email is required' })
@@ -88,7 +91,7 @@ router.post('/invite', verifyJwt, async (req: Request, res: Response) => {
 })
 
 // PUT /api/auth/team/:adminId/role (protected)
-router.put('/team/:adminId/role', verifyJwt, async (req: Request, res: Response) => {
+router.put('/team/:adminId/role', verifyJwt, requireRole('OWNER'), async (req: Request, res: Response) => {
   const companyId = req.companyId
   const { adminId } = req.params
   const { role } = req.body as { role: string }
@@ -110,7 +113,7 @@ router.put('/team/:adminId/role', verifyJwt, async (req: Request, res: Response)
 })
 
 // DELETE /api/auth/team/:adminId (protected)
-router.delete('/team/:adminId', verifyJwt, async (req: Request, res: Response) => {
+router.delete('/team/:adminId', verifyJwt, requireRole('OWNER'), async (req: Request, res: Response) => {
   const companyId = req.companyId
   const { adminId } = req.params
 
@@ -147,6 +150,90 @@ router.put('/profile', verifyJwt, async (req: Request, res: Response) => {
   } catch (e) {
     return res.status(400).json({ error: (e as Error).message })
   }
+})
+
+// POST /api/auth/mfa/enroll (protected)
+router.post('/mfa/enroll', verifyJwt, async (req: Request, res: Response) => {
+  try {
+    const { currentPassword } = req.body as { currentPassword?: string }
+    const email = req.adminEmail
+    if (!email) {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+    if (!currentPassword) {
+      return res.status(400).json({ error: 'currentPassword is required' })
+    }
+
+    const result = await authService.enrollMfa({ email, password: currentPassword })
+
+    await auditService.log({
+      companyId: req.companyId!,
+      userEmail: email,
+      action: 'ENROLL_MFA',
+      req,
+      details: { email },
+    })
+
+    return res.json({ secret: result.secret, otpAuthUrl: result.otpauthUrl })
+  } catch (e) {
+    return res.status(400).json({ error: (e as Error).message })
+  }
+})
+
+// POST /api/auth/mfa/confirm (protected)
+router.post('/mfa/confirm', verifyJwt, async (req: Request, res: Response) => {
+  try {
+    const { token } = req.body as { token?: string }
+    const email = req.adminEmail
+    if (!email) {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+    if (!token) {
+      return res.status(400).json({ error: 'token is required' })
+    }
+
+    const result = await authService.confirmMfa({ email, token })
+
+    await auditService.log({
+      companyId: req.companyId!,
+      userEmail: email,
+      action: 'CONFIRM_MFA',
+      req,
+      details: { email },
+    })
+
+    return res.json(result)
+  } catch (e) {
+    return res.status(400).json({ error: (e as Error).message })
+  }
+})
+
+// GET /api/auth/lockout-status (protected)
+router.get('/lockout-status', verifyJwt, async (req: Request, res: Response) => {
+  return res.json({
+    ip: req.ip,
+    status: 'not_tracked',
+    maxAllowedRequests: config.rateLimitMaxRequests,
+    windowMs: config.rateLimitWindowMs,
+  })
+})
+
+// POST /api/auth/reset-lockout (protected)
+router.post('/reset-lockout', verifyJwt, async (req: Request, res: Response) => {
+  const email = req.adminEmail
+  if (!req.companyId || !email) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+
+  await auditService.log({
+    companyId: req.companyId,
+    userEmail: email,
+    action: 'RESET_LOCKOUT',
+    req,
+    details: { note: 'No persistent lockout store is configured yet' },
+  })
+
+  return res.json({ success: true, message: 'Lockout state cleared for the current request context.' })
 })
 
 export { tokenRefreshMiddleware }

@@ -111,6 +111,7 @@ const Settings: React.FC = () => {
   const [mfaLoading, setMfaLoading] = useState(false)
 
   const [activeTab, setActiveTab] = useState<'general' | 'security' | 'team' | 'integrations'>('general')
+  const exportBaseUrl = (api.defaults.baseURL || window.location.origin).replace(/\/$/, '')
 
   useEffect(() => {
     fetchProfile()
@@ -913,10 +914,10 @@ const Settings: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 pt-2">
-              <a href={`http://localhost:5000/api/export?format=csv&type=${exportType}&range=last_12_months`} download className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 transition-colors shadow-md shadow-purple-500/20">
+              <a href={`${exportBaseUrl}/api/export?format=csv&type=${exportType}&range=last_12_months`} download className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 transition-colors shadow-md shadow-purple-500/20">
                 <Download className="h-3.5 w-3.5" /> Download CSV
               </a>
-              <a href={`http://localhost:5000/api/export?format=json&type=${exportType}&range=last_12_months`} download className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl hover:bg-slate-200 transition-colors">
+              <a href={`${exportBaseUrl}/api/export?format=json&type=${exportType}&range=last_12_months`} download className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl hover:bg-slate-200 transition-colors">
                 <Download className="h-3.5 w-3.5" /> Download JSON
               </a>
             </div>

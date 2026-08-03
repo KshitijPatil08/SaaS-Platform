@@ -154,7 +154,7 @@ const DocsPage: React.FC = () => {
   }
 
   const renderCodeSnippet = (ep: EndpointDoc) => {
-    const baseUrl = 'http://localhost:5000'
+    const baseUrl = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, '')
     if (selectedLang === 'curl') {
       return `curl -X ${ep.method} "${baseUrl}${ep.path}" \\
   -H "Authorization: Bearer <your_jwt_access_token>" \\
