@@ -18,9 +18,14 @@ export const accountsService = {
     if (query.status) where.status = query.status
     if (query.plan) where.plan = query.plan
     if (query.search) {
+      const isPostgres = process.env.DATABASE_URL?.startsWith('postgres')
+      const searchFilter = isPostgres
+        ? (term: string) => ({ contains: term, mode: 'insensitive' as const })
+        : (term: string) => ({ contains: term })
+
       where.OR = [
-        { name: { contains: query.search, mode: 'insensitive' } },
-        { email: { contains: query.search, mode: 'insensitive' } },
+        { name: searchFilter(query.search) },
+        { email: searchFilter(query.search) },
       ]
     }
     return where
