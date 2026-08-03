@@ -1,5 +1,6 @@
 import { prisma } from '../modules/shared/lib/prisma'
 import { kpiCache } from '../modules/shared/lib/kpi-cache'
+import { withJobLock } from '../modules/shared/lib/job-lock'
 
 /**
  * Daily MRR Snapshot Job
@@ -141,11 +142,13 @@ export async function runDailyMrrSnapshotJob() {
 export function startSnapshotWorker() {
   // Run initial job 5 seconds after boot
   setTimeout(() => {
-    runDailyMrrSnapshotJob().catch(console.error)
+    withJobLock('daily-mrr-snapshot', 2 * 60 * 60 * 1000, () => runDailyMrrSnapshotJob())
+      .catch(console.error)
   }, 5000)
 
   // Interval: 12 hours
   setInterval(() => {
-    runDailyMrrSnapshotJob().catch(console.error)
+    withJobLock('daily-mrr-snapshot', 2 * 60 * 60 * 1000, () => runDailyMrrSnapshotJob())
+      .catch(console.error)
   }, 12 * 60 * 60 * 1000)
 }

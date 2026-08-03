@@ -290,3 +290,17 @@ model ProcessedWebhookEvent {
   @@index([event_id])
   @@index([processed_at])
 }
+
+// ─── Scheduled Job Locks ────────────────────────────────────────────────────
+// Prevents duplicate execution of background workers when the API runs with
+// multiple replicas or restarts overlap with in-flight jobs.
+
+model JobLock {
+  name       String   @id
+  owner_id   String
+  locked_until DateTime
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([locked_until])
+}

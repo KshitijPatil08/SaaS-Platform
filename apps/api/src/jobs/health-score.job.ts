@@ -1,6 +1,7 @@
 import { prisma } from '../modules/shared/lib/prisma'
 import { kpiCache } from '../modules/shared/lib/kpi-cache'
 import { healthScoreService } from '../modules/analytics/health-score.service'
+import { withJobLock } from '../modules/shared/lib/job-lock'
 
 /**
  * Nightly Health Score Recomputation Job
@@ -71,11 +72,13 @@ export async function runNightlyHealthScoreJob() {
 export function startHealthScoreWorker() {
   // Initial run: 10s after boot (stagger from snapshot job's 5s boot)
   setTimeout(() => {
-    runNightlyHealthScoreJob().catch(console.error)
+    withJobLock('nightly-health-score', 3 * 60 * 60 * 1000, () => runNightlyHealthScoreJob())
+      .catch(console.error)
   }, 10_000)
 
   // Recurring run: every 24 hours
   setInterval(() => {
-    runNightlyHealthScoreJob().catch(console.error)
+    withJobLock('nightly-health-score', 3 * 60 * 60 * 1000, () => runNightlyHealthScoreJob())
+      .catch(console.error)
   }, 24 * 60 * 60 * 1000)
 }
