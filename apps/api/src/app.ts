@@ -4,7 +4,7 @@ import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import cookieParser from 'cookie-parser'
 import dotenv from 'dotenv'
-import { doubleCsrf } from 'csrf-csrf'
+import csurf from 'csurf'
 
 import { config } from './modules/shared/lib/config'
 import { createRateLimitStore } from './modules/shared/lib/rateLimitStore'
@@ -28,6 +28,20 @@ import { startSnapshotWorker } from './jobs/mrr-snapshot.job'
 import { startHealthScoreWorker } from './jobs/health-score.job'
 import { warmUpCache } from './modules/shared/lib/kpi-cache'
 import { prisma } from './modules/shared/lib/prisma'
+import apiKeysRouter from './modules/api-keys/api-keys.routes'
+import notificationsRouter from './modules/notifications/slack-notifications.service'
+import inAppNotificationsRouter from './modules/notifications/notifications.routes'
+import dunningRouter from './modules/billing/dunning.routes'
+import webhookSimulatorRouter from './modules/billing/webhook-simulator.routes'
+import healthRulesRouter from './modules/analytics/health-rules.routes'
+import csvImportRouter from './modules/accounts/csv-import.routes'
+import mrrGoalRouter from './modules/analytics/mrr-goal.routes'
+import customerNotesRouter from './modules/accounts/customer-notes.routes'
+import savedSegmentsRouter from './modules/accounts/saved-segments.routes'
+import statusRouter from './modules/shared/status.routes'
+import trialExpiryRouter from './modules/analytics/trial-expiry.routes'
+import { apiKeyMiddleware } from './modules/api-keys/api-key.middleware'
+import { sentry } from './modules/shared/lib/sentry'
 
 dotenv.config()
 
@@ -95,7 +109,7 @@ app.use(cors({
   origin: config.clientOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-csrf-token'],
 }))
 
 // Body Parsing
@@ -108,57 +122,55 @@ app.use(express.json({ limit: '1mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser(config.cookieSecret))
 
-// ── CSRF Protection (double-submit cookie) — applied globally ─────────────────
-// Must be registered immediately after cookieParser so CodeQL sees it covers
-// every downstream route handler.
-// Stripe webhook paths are exempted via skipCsrfProtection — they are
-// authenticated via HMAC signature, not cookies.
-const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
-  getSecret: () => config.cookieSecret,
-  getSessionIdentifier: (req) =>
-    (req.headers['authorization'] as string | undefined) ?? req.ip ?? 'anon',
-  cookieName: '__Host-psm.x-csrf-token',
-  cookieOptions: {
+// ── Webhook Routes (registered BEFORE CSRF middleware) ────────────────────────
+// Stripe webhooks are authenticated via HMAC signature, NOT cookies, so they
+// are legitimately exempt from CSRF token checks. Registering them here —
+// before app.use(csrfProtection) — means they are processed by Express
+// before the CSRF middleware runs, without needing a CSRF exemption flag.
+// Rate-limited separately to prevent DoS on the public webhook endpoint.
+const webhookLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300,                  // Stripe sends at most ~10 events/s in bursts; 300 is generous
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many webhook requests, please try again later.' },
+})
+app.use('/webhooks/', webhookLimiter)
+app.use('/webhooks/stripe', stripeWebhookRouter)
+app.use('/webhooks/stripe-vendor', vendorWebhookRouter)
+
+// ── CSRF Protection ───────────────────────────────────────────────────────────
+// csurf (double-submit cookie) is applied AFTER webhook routes but BEFORE all
+// API routes — every API route handler registered below this line is protected.
+// GET/HEAD/OPTIONS are ignored by csurf by default.
+// The frontend must:
+//   1. Read the CSRF token from the signed cookie (set by GET /api/csrf-token)
+//   2. Send it as the 'x-csrf-token' request header on every POST/PUT/PATCH/DELETE
+const csrfProtection = csurf({
+  cookie: {
+    key: '__Host-psm.csrf',
     sameSite: 'strict',
     secure: config.isProduction,
-    httpOnly: true,
+    httpOnly: false, // JS-readable so the frontend can read and forward the token
+    signed: true,
   },
-  ignoredMethods: ['GET', 'HEAD', 'OPTIONS'],
-  getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string,
-  // Exempt webhook paths — Stripe authenticates via HMAC signature, not cookies
-  skipCsrfProtection: (req) => req.path.startsWith('/webhooks/'),
+  value: (req) => req.headers['x-csrf-token'] as string,
 })
+app.use(csrfProtection)
 
-// Apply directly (no wrapper) so CodeQL recognises this as global CSRF protection
-app.use(doubleCsrfProtection)
-
-// Expose a GET endpoint so the client can fetch the initial CSRF token
-app.get('/api/csrf-token', (req, res) => {
-  const token = generateCsrfToken(req, res)
-  res.json({ csrfToken: token })
-})
-
-// Health Check (before auth)
+// Health Check (before auth — GET only, csurf ignores GET by default)
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
+// Expose a GET endpoint so the client can fetch the initial CSRF token
+// csurf populates req.csrfToken() after the middleware runs
+app.get('/api/csrf-token', (req, res) => {
+  res.json({ csrfToken: (req as any).csrfToken() })
+})
+
 // Token Refresh Middleware
 app.use(tokenRefreshMiddleware)
-
-import apiKeysRouter from './modules/api-keys/api-keys.routes'
-import notificationsRouter from './modules/notifications/slack-notifications.service'
-import inAppNotificationsRouter from './modules/notifications/notifications.routes'
-import dunningRouter from './modules/billing/dunning.routes'
-import webhookSimulatorRouter from './modules/billing/webhook-simulator.routes'
-import healthRulesRouter from './modules/analytics/health-rules.routes'
-import csvImportRouter from './modules/accounts/csv-import.routes'
-import mrrGoalRouter from './modules/analytics/mrr-goal.routes'
-import customerNotesRouter from './modules/accounts/customer-notes.routes'
-import savedSegmentsRouter from './modules/accounts/saved-segments.routes'
-import statusRouter from './modules/shared/status.routes'
-import trialExpiryRouter from './modules/analytics/trial-expiry.routes'
-import { apiKeyMiddleware } from './modules/api-keys/api-key.middleware'
 
 // ─── Global API Key bearer token auth (runs before JWT check) ──────────────────
 // If request has Authorization: Bearer pulse_live_xxx, apiKeyMiddleware validates
@@ -195,21 +207,6 @@ app.use('/api/status', statusRouter)
 
 // Vendor Billing — Pulse's own subscription management
 app.use('/api/vendor-billing', verifyJwt, vendorBillingRouter)
-
-// Stripe Webhooks (raw body required — CSRF excluded, Stripe signature is the auth)
-// Rate-limited separately: public endpoint must not be left open to DoS.
-const webhookLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300,                  // Stripe sends at most ~10 events/s in bursts; 300 is generous
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many webhook requests, please try again later.' },
-})
-app.use('/webhooks/', webhookLimiter)
-app.use('/webhooks/stripe', stripeWebhookRouter)
-app.use('/webhooks/stripe-vendor', vendorWebhookRouter)
-
-import { sentry } from './modules/shared/lib/sentry'
 
 // Error Handler
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
