@@ -4,6 +4,9 @@ import {
   BookOpen, Terminal, Key, Shield, ArrowLeft, Code, Database,
   Copy, Check, Layers, Server, Globe, Cpu, Zap, Lock, ChevronRight
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../lib/api'
+
 
 type CodeLang = 'curl' | 'javascript' | 'python'
 
@@ -144,6 +147,18 @@ const DocsPage: React.FC = () => {
   const [selectedLang, setSelectedLang] = useState<CodeLang>('curl')
   const [copiedPath, setCopiedPath] = useState<string | null>(null)
 
+  const { data: apiKeys } = useQuery({
+    queryKey: ['api-keys'],
+    queryFn: async () => {
+      const { data } = await api.get('/api/api-keys')
+      return data
+    }
+  })
+
+  const hasApiKey = apiKeys && apiKeys.length > 0
+  const apiKeyDisplay = hasApiKey ? apiKeys[0].key_prefix : '<your_api_key>'
+
+
   // Fix #14: page title
   useEffect(() => { document.title = 'API Documentation | Pulse' }, [])
 
@@ -157,21 +172,21 @@ const DocsPage: React.FC = () => {
     const baseUrl = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, '')
     if (selectedLang === 'curl') {
       return `curl -X ${ep.method} "${baseUrl}${ep.path}" \\
-  -H "Authorization: Bearer <your_jwt_access_token>" \\
+  -H "Authorization: Bearer ${apiKeyDisplay}" \\
   -H "Content-Type: application/json"`
     }
     if (selectedLang === 'javascript') {
       return `import axios from 'axios'
 
 const response = await axios.${ep.method.toLowerCase()}('${baseUrl}${ep.path}', {
-  withCredentials: true, // or headers: { Authorization: 'Bearer <token>' }
+  headers: { Authorization: 'Bearer ${apiKeyDisplay}' }
 })
 console.log(response.data)`
     }
     return `import requests
 
 url = "${baseUrl}${ep.path}"
-headers = {"Authorization": "Bearer <your_token>"}
+headers = {"Authorization": "Bearer ${apiKeyDisplay}"}
 response = requests.${ep.method.toLowerCase()}(url, headers=headers)
 print(response.json())`
   }
@@ -226,22 +241,30 @@ print(response.json())`
         {/* TAB 1: REST API Endpoints */}
         {activeTab === 'endpoints' && (
           <div className="space-y-6">
-            {/* Language Switcher */}
-            <div className="flex items-center justify-between bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-xs">
-              <span className="text-slate-400 font-medium">Select Code Snippet Language:</span>
-              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
-                {(['curl', 'javascript', 'python'] as CodeLang[]).map((lang) => (
-                  <button
-                    key={lang}
-                    onClick={() => setSelectedLang(lang)}
-                    className={`px-3 py-1 rounded-md text-[11px] font-bold uppercase transition-colors ${
-                      selectedLang === lang ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {lang}
-                  </button>
-                ))}
+            {/* Language Switcher & API Key Alert */}
+            <div className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="text-slate-400 font-medium">Select Language:</span>
+                <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+                  {(['curl', 'javascript', 'python'] as CodeLang[]).map((lang) => (
+                    <button
+                      key={lang}
+                      onClick={() => setSelectedLang(lang)}
+                      className={`px-3 py-1 rounded-md text-[11px] font-bold uppercase transition-colors ${
+                        selectedLang === lang ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {lang}
+                    </button>
+                  ))}
+                </div>
               </div>
+              {!hasApiKey && (
+                <Link to="/settings?tab=integrations" className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg hover:bg-amber-500/20 transition-colors">
+                  <Key className="h-3.5 w-3.5" />
+                  Generate an API key to replace placeholders
+                </Link>
+              )}
             </div>
 
             {/* Endpoints List */}

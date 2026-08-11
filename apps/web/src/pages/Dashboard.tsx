@@ -9,6 +9,7 @@ import RetentionRing from '../components/RetentionRing';
 import AccountsTable from '../components/AccountsTable';
 import CohortHeatmap from '../components/CohortHeatmap';
 import PredictiveRiskWidget from '../components/PredictiveRiskWidget';
+import { TrialExpiryWidget } from '../components/TrialExpiryWidget';
 import MrrGoalWidget from '../components/MrrGoalWidget';
 import ExecutiveReportModal from '../components/ExecutiveReportModal';
 import { CommandPalette } from '../components/CommandPalette';
@@ -278,10 +279,15 @@ const Dashboard: React.FC = () => {
         <MRRChart />
       </motion.div>
 
-      {/* Predictive Churn AI Widget */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }}>
-        <PredictiveRiskWidget />
-      </motion.div>
+      {/* AI Risk & Trial Expiry Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }}>
+          <PredictiveRiskWidget />
+        </motion.div>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.38 }}>
+          <TrialExpiryWidget />
+        </motion.div>
+      </div>
 
       {/* Funnel + Retention Ring */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
