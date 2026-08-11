@@ -48,5 +48,8 @@
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
+  },
+  "overrides": {
+    "tar": ">=7.5.21"
   }
 }
