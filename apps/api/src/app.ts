@@ -108,16 +108,13 @@ app.use(express.json({ limit: '1mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser(config.cookieSecret))
 
-// ── CSRF Protection (double-submit cookie) ────────────────────────────────────
-// Webhooks are authenticated by Stripe signature — not session/cookie — so
-// they MUST be excluded from CSRF checks. All other state-mutating /api/*
-// routes are protected by the CSRF middleware below.
-// The frontend reads the CSRF token cookie and sends it as the
-// 'x-csrf-token' request header on every POST/PUT/PATCH/DELETE.
+// ── CSRF Protection (double-submit cookie) — applied globally ─────────────────
+// Must be registered immediately after cookieParser so it covers every route.
+// Webhook routes (/webhooks/*) are explicitly exempted — they are authenticated
+// via Stripe's HMAC signature, not cookies, so CSRF doesn't apply.
+// GET/HEAD/OPTIONS are ignored by csrf-csrf's ignoredMethods config.
 const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
   getSecret: () => config.cookieSecret,
-  // For a JWT/stateless API use the Authorization header value (or IP) as the
-  // per-session identifier so tokens can't be replayed across sessions.
   getSessionIdentifier: (req) =>
     (req.headers['authorization'] as string | undefined) ?? req.ip ?? 'anon',
   cookieName: '__Host-psm.x-csrf-token',
@@ -130,7 +127,13 @@ const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
   getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string,
 })
 
-// Expose a GET endpoint so the client can fetch the initial token
+// Global CSRF guard — skip only the Stripe webhook paths that use signature auth
+app.use((req, res, next) => {
+  if (req.path.startsWith('/webhooks/')) return next()
+  doubleCsrfProtection(req, res, next)
+})
+
+// Expose a GET endpoint so the client can fetch the initial CSRF token
 app.get('/api/csrf-token', (req, res) => {
   const token = generateCsrfToken(req, res)
   res.json({ csrfToken: token })
@@ -163,12 +166,7 @@ import { apiKeyMiddleware } from './modules/api-keys/api-key.middleware'
 // it and sets req.companyId so all protected routes below work transparently.
 app.use(apiKeyMiddleware)
 
-// CSRF protection — applied globally to all /api/* routes.
-// Webhook routes (/webhooks/*) are excluded: they live outside /api/ and
-// are already authenticated via Stripe signature verification.
-app.use('/api', doubleCsrfProtection)
-
-// Auth routes (public — CSRF already applied via the /api prefix above)
+// Auth routes (public — CSRF applied globally above)
 app.use('/api/auth', authRouter)
 
 // Protected Routes (planGate enforces customer cap per subscription tier)

@@ -10,14 +10,25 @@ export const slackService = {
    * the Express response back to Stripe (which retries on timeout).
    */
   sendSlackAlert(webhookUrl: string, message: { text: string; blocks?: any[] }): void {
-    // SECURITY: Only allow official Slack Incoming Webhook URLs to prevent SSRF.
-    // An attacker who can write to the DB's slack_webhook_url field must not be
-    // able to pivot to internal services (Redis, metadata endpoint, etc.).
-    const SLACK_WEBHOOK_PREFIX = 'https://hooks.slack.com/'
-    if (!webhookUrl || !webhookUrl.startsWith(SLACK_WEBHOOK_PREFIX)) return
+    // SECURITY: Parse and validate the URL, then reconstruct it from a hardcoded
+    // host constant so that no attacker-controlled string ever flows directly
+    // into fetch(). This prevents SSRF regardless of what the DB field contains.
+    const SLACK_HOST = 'https://hooks.slack.com'
+    let parsedUrl: URL
+    try {
+      parsedUrl = new URL(webhookUrl)
+    } catch {
+      return // Reject malformed URLs
+    }
+    // Reject anything that isn't a real Slack Incoming Webhook endpoint
+    if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'hooks.slack.com') return
+
+    // Reconstruct from trusted host + validated path — the user-supplied string
+    // is never used directly in the fetch call.
+    const safeUrl = `${SLACK_HOST}${parsedUrl.pathname}`
 
     // Fire-and-forget: enqueue the HTTP request but do not block the caller
-    fetch(webhookUrl, {
+    fetch(safeUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(message),
