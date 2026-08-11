@@ -10,22 +10,34 @@ export const slackService = {
    * the Express response back to Stripe (which retries on timeout).
    */
   sendSlackAlert(webhookUrl: string, message: { text: string; blocks?: any[] }): void {
-    // SECURITY: Parse and validate the URL, then reconstruct it from a hardcoded
-    // host constant so that no attacker-controlled string ever flows directly
-    // into fetch(). This prevents SSRF regardless of what the DB field contains.
+    // SECURITY — SSRF prevention:
+    // 1. Parse the URL and reject any non-Slack hostname
+    // 2. Validate the path with a strict regex that only allows the three
+    //    alphanumeric token segments that all Slack webhook paths contain
+    // 3. Reconstruct the URL from the HARDCODED host + encodeURIComponent(segment)
+    //    — no raw user string reaches fetch(); CodeQL recognises encodeURIComponent
+    //    as an SSRF sanitiser for path components.
     const SLACK_HOST = 'https://hooks.slack.com'
+
     let parsedUrl: URL
     try {
       parsedUrl = new URL(webhookUrl)
     } catch {
       return // Reject malformed URLs
     }
-    // Reject anything that isn't a real Slack Incoming Webhook endpoint
+
     if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'hooks.slack.com') return
 
-    // Reconstruct from trusted host + validated path — the user-supplied string
-    // is never used directly in the fetch call.
-    const safeUrl = `${SLACK_HOST}${parsedUrl.pathname}`
+    // Slack Incoming Webhook paths are always /services/<T_id>/<B_id>/<token>
+    // where every segment is purely alphanumeric — no slashes, dots, or traversal.
+    const SLACK_PATH_RE = /^\/services\/([A-Za-z0-9]+)\/([A-Za-z0-9]+)\/([A-Za-z0-9]+)$/
+    const m = SLACK_PATH_RE.exec(parsedUrl.pathname)
+    if (!m) return // Reject paths that don't match the Slack webhook format
+
+    // Reconstruct using only regex-matched segments (breaks taint from raw URL)
+    // encodeURIComponent is CodeQL's recognised sanitiser for URL path values.
+    const safeUrl =
+      `${SLACK_HOST}/services/${encodeURIComponent(m[1])}/${encodeURIComponent(m[2])}/${encodeURIComponent(m[3])}`
 
     // Fire-and-forget: enqueue the HTTP request but do not block the caller
     fetch(safeUrl, {

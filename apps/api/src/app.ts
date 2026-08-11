@@ -109,10 +109,10 @@ app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser(config.cookieSecret))
 
 // ── CSRF Protection (double-submit cookie) — applied globally ─────────────────
-// Must be registered immediately after cookieParser so it covers every route.
-// Webhook routes (/webhooks/*) are explicitly exempted — they are authenticated
-// via Stripe's HMAC signature, not cookies, so CSRF doesn't apply.
-// GET/HEAD/OPTIONS are ignored by csrf-csrf's ignoredMethods config.
+// Must be registered immediately after cookieParser so CodeQL sees it covers
+// every downstream route handler.
+// Stripe webhook paths are exempted via skipCsrfProtection — they are
+// authenticated via HMAC signature, not cookies.
 const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
   getSecret: () => config.cookieSecret,
   getSessionIdentifier: (req) =>
@@ -125,13 +125,12 @@ const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
   },
   ignoredMethods: ['GET', 'HEAD', 'OPTIONS'],
   getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string,
+  // Exempt webhook paths — Stripe authenticates via HMAC signature, not cookies
+  skipCsrfProtection: (req) => req.path.startsWith('/webhooks/'),
 })
 
-// Global CSRF guard — skip only the Stripe webhook paths that use signature auth
-app.use((req, res, next) => {
-  if (req.path.startsWith('/webhooks/')) return next()
-  doubleCsrfProtection(req, res, next)
-})
+// Apply directly (no wrapper) so CodeQL recognises this as global CSRF protection
+app.use(doubleCsrfProtection)
 
 // Expose a GET endpoint so the client can fetch the initial CSRF token
 app.get('/api/csrf-token', (req, res) => {
