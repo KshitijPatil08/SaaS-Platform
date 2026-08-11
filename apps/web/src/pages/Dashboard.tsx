@@ -324,7 +324,11 @@ const Dashboard: React.FC = () => {
       </motion.div>
 
       {/* Command Palette Modal */}
-      <CommandPalette isOpen={cmdOpen} onClose={() => setCmdOpen(false)} />
+      <CommandPalette
+        isOpen={cmdOpen}
+        onClose={() => setCmdOpen(false)}
+        onOpen={() => setCmdOpen(true)}
+      />
 
       {/* Executive Report Board Deck Modal */}
       <ExecutiveReportModal isOpen={reportOpen} onClose={() => setReportOpen(false)} />

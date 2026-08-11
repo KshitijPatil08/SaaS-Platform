@@ -110,18 +110,28 @@ export interface AccountsResponse {
   }
 }
 
-export function useAccounts(page = 1, pageSize = 10, status?: string, plan?: string, search?: string) {
+export function useAccounts(
+  page = 1,
+  pageSize = 10,
+  status?: string,
+  plan?: string,
+  search?: string,
+  extraParams?: Record<string, string | number>
+) {
   return useQuery<AccountsResponse>({
-    queryKey: ['accounts', page, pageSize, status, plan, search],
+    queryKey: ['accounts', page, pageSize, status, plan, search, extraParams],
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
       if (status) params.set('status', status)
       if (plan) params.set('plan', plan)
       if (search) params.set('search', search)
+      if (extraParams) {
+        Object.entries(extraParams).forEach(([k, v]) => params.set(k, String(v)))
+      }
       const { data } = await api.get(`/api/accounts?${params.toString()}`)
       return data
     },
-    staleTime: 30 * 1000, // accounts list changes more often — 30s stale time
+    staleTime: 30 * 1000,
     refetchOnWindowFocus: false,
   })
 }

@@ -28,12 +28,20 @@ export const SegmentFilter: React.FC<SegmentFilterProps> = ({ activeSegment, onS
   const [showAddModal, setShowAddModal] = useState(false)
   const [newSegmentName, setNewSegmentName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [segmentsLoading, setSegmentsLoading] = useState(false)
+  const [segmentsError, setSegmentsError] = useState<string | null>(null)
 
   const fetchSavedSegments = async () => {
+    setSegmentsLoading(true)
+    setSegmentsError(null)
     try {
       const res = await api.get('/api/saved-segments')
-      setCustomSegments(res.data)
-    } catch {}
+      setCustomSegments(Array.isArray(res.data) ? res.data : [])
+    } catch {
+      setSegmentsError('Could not load saved segments')
+    } finally {
+      setSegmentsLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -52,7 +60,11 @@ export const SegmentFilter: React.FC<SegmentFilterProps> = ({ activeSegment, onS
       setNewSegmentName('')
       setShowAddModal(false)
       await fetchSavedSegments()
-    } catch {}
+    } catch (err: any) {
+      // Show error inside modal
+      const errMsg = err?.response?.data?.error || 'Failed to save segment'
+      setSegmentsError(errMsg)
+    }
     setSaving(false)
   }
 
@@ -61,14 +73,21 @@ export const SegmentFilter: React.FC<SegmentFilterProps> = ({ activeSegment, onS
     try {
       await api.delete(`/api/saved-segments/${id}`)
       setCustomSegments(prev => prev.filter(s => s.id !== id))
-    } catch {}
+    } catch {
+      setSegmentsError('Failed to delete segment')
+    }
   }
+
 
   return (
     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0 mr-1 flex items-center gap-1">
         <Sparkles className="h-3 w-3 text-purple-500" /> Segments:
+        {segmentsLoading && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse inline-block" />}
       </span>
+      {segmentsError && (
+        <span className="text-[10px] text-amber-500 font-medium shrink-0" title={segmentsError}>⚠ segments</span>
+      )}
 
       {/* Built-in segments */}
       {DEFAULT_SEGMENTS.map((seg) => {

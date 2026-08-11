@@ -93,7 +93,7 @@ app.use('/api/auth/forgot-password', authLimiter)
 app.use(cors({
   origin: config.clientOrigin,
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }))
 
@@ -126,6 +126,7 @@ import mrrGoalRouter from './modules/analytics/mrr-goal.routes'
 import customerNotesRouter from './modules/accounts/customer-notes.routes'
 import savedSegmentsRouter from './modules/accounts/saved-segments.routes'
 import statusRouter from './modules/shared/status.routes'
+import trialExpiryRouter from './modules/analytics/trial-expiry.routes'
 import { apiKeyMiddleware } from './modules/api-keys/api-key.middleware'
 
 // ─── Global API Key bearer token auth (runs before JWT check) ──────────────────
@@ -156,6 +157,7 @@ app.use('/api/webhooks-simulator', verifyJwt, webhookSimulatorRouter)
 app.use('/api/mrr-goal', verifyJwt, mrrGoalRouter)
 app.use('/api/customer-notes', verifyJwt, customerNotesRouter)
 app.use('/api/saved-segments', verifyJwt, savedSegmentsRouter)
+app.use('/api/analytics/trial-expiry', verifyJwt, planGate, trialExpiryRouter)
 
 // Public — no auth required
 app.use('/api/status', statusRouter)

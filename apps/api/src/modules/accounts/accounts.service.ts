@@ -17,6 +17,25 @@ export const accountsService = {
     const where: Record<string, unknown> = { company_id: companyId }
     if (query.status) where.status = query.status
     if (query.plan) where.plan = query.plan
+
+    // Server-side segment filters — applied before pagination so all pages are correct
+    if (query.mrr_gte !== undefined) {
+      where.mrr_cents = { gte: query.mrr_gte }
+    }
+
+    // health_score_lt joins the latest HealthScore for the customer
+    // We use a subquery approach: filter customers whose latest health score < threshold
+    // Prisma handles this via a nested where on the relation
+    if (query.health_score_lt !== undefined) {
+      where.health_scores = {
+        some: {
+          score: { lt: query.health_score_lt },
+          // Only look at scores from the last 7 days to avoid stale data affecting filter
+          computed_at: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        },
+      }
+    }
+
     if (query.search) {
       const isPostgres = process.env.DATABASE_URL?.startsWith('postgres')
       const searchFilter = isPostgres
@@ -24,12 +43,13 @@ export const accountsService = {
         : (term: string) => ({ contains: term })
 
       where.OR = [
-        { name: searchFilter(query.search) },
-        { email: searchFilter(query.search) },
+        { name: searchFilter(query.search!) },
+        { email: searchFilter(query.search!) },
       ]
     }
     return where
   },
+
 
   async getById(id: string, companyId: string) {
     return prisma.customer.findFirst({ where: { id, company_id: companyId } })

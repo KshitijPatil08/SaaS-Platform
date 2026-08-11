@@ -11,6 +11,7 @@ import { useTheme } from '../hooks/useTheme'
 interface CommandPaletteProps {
   isOpen: boolean
   onClose: () => void
+  onOpen: () => void
 }
 
 const COMMAND_NAV = [
@@ -22,7 +23,7 @@ const COMMAND_NAV = [
   { id: 'settings', label: 'Go to Organization Settings', path: '/settings', icon: <Settings className="h-4 w-4 text-rose-500" /> },
 ]
 
-export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose }) => {
+export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onOpen }) => {
   const [query, setQuery] = useState('')
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
@@ -37,7 +38,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
         if (isOpen) onClose()
         else {
           setQuery('')
-          // Open trigger handled by parent or state
+          onOpen()
         }
       }
       if (e.key === 'Escape' && isOpen) {

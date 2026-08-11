@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import {
   Copy, Check, ShieldCheck, Key, Building, Link as LinkIcon,
@@ -66,7 +67,6 @@ const Settings: React.FC = () => {
 
   // Team Admin invite state
   const [inviteEmail, setInviteEmail] = useState('')
-  const [invitePassword, setInvitePassword] = useState('')
   const [inviteRole, setInviteRole] = useState<'ADMIN' | 'ANALYST' | 'DEVELOPER'>('ADMIN')
   const [inviting, setInviting] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
@@ -110,7 +110,22 @@ const Settings: React.FC = () => {
   const [mfaTokenInput, setMfaTokenInput] = useState('')
   const [mfaLoading, setMfaLoading] = useState(false)
 
-  const [activeTab, setActiveTab] = useState<'general' | 'security' | 'team' | 'integrations'>('general')
+  const [activeTab, setActiveTabRaw] = useState<'general' | 'security' | 'team' | 'integrations'>('general')
+  const [settingsParams, setSettingsParams] = useSearchParams()
+
+  // Sync active tab with URL ?tab= param for bookmarkability and refresh persistence
+  useEffect(() => {
+    const tab = settingsParams.get('tab') as 'general' | 'security' | 'team' | 'integrations' | null
+    if (tab && ['general', 'security', 'team', 'integrations'].includes(tab)) {
+      setActiveTabRaw(tab)
+    }
+  }, [settingsParams])
+
+  const setActiveTab = (tab: 'general' | 'security' | 'team' | 'integrations') => {
+    setActiveTabRaw(tab)
+    setSettingsParams({ tab }, { replace: true })
+  }
+
   const exportBaseUrl = (api.defaults.baseURL || window.location.origin).replace(/\/$/, '')
 
   useEffect(() => {
@@ -188,14 +203,14 @@ const Settings: React.FC = () => {
     setInviting(true)
     setMessage(null)
     try {
+      // Security: never send a password from the browser.
+      // The server generates a random secure password and emails a reset link to the invitee.
       await api.post('/api/auth/invite', {
         email: inviteEmail,
-        password: invitePassword || undefined,
         role: inviteRole,
       })
-      setMessage({ type: 'success', text: `Admin invitation (${inviteRole}) sent to ${inviteEmail}` })
+      setMessage({ type: 'success', text: `Invitation sent to ${inviteEmail} — they'll receive a password reset email to set their own password.` })
       setInviteEmail('')
-      setInvitePassword('')
       setShowInviteModal(false)
       fetchProfile()
       fetchAuditData()

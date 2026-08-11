@@ -7,12 +7,24 @@ interface OnboardingBannerProps {
   onDataSeeded?: () => void
 }
 
+const DISMISS_KEY = 'pulse_onboarding_dismissed'
+
 export const OnboardingBanner: React.FC<OnboardingBannerProps> = ({ webhookUrl, onDataSeeded }) => {
   const [copied, setCopied] = useState(false)
   const [stripeKey, setStripeKey] = useState('')
   const [keySaved, setKeySaved] = useState(false)
+  const [keyError, setKeyError] = useState<string | null>(null)
   const [seeding, setSeeding] = useState(false)
-  const [dismissed, setDismissed] = useState(false)
+  const [seedError, setSeedError] = useState<string | null>(null)
+  // Persist dismiss across page reloads
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem(DISMISS_KEY) === '1' } catch { return false }
+  })
+
+  const handleDismiss = () => {
+    try { localStorage.setItem(DISMISS_KEY, '1') } catch {}
+    setDismissed(true)
+  }
 
   if (dismissed) return null
 
@@ -26,11 +38,12 @@ export const OnboardingBanner: React.FC<OnboardingBannerProps> = ({ webhookUrl, 
   const handleSaveKey = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!stripeKey) return
+    setKeyError(null)
     try {
       await api.put('/api/auth/profile', { stripeId: stripeKey })
       setKeySaved(true)
-    } catch {
-      /* ignore */
+    } catch (err: any) {
+      setKeyError(err?.response?.data?.error || 'Failed to save Stripe account ID')
     }
   }
 
@@ -52,7 +65,7 @@ export const OnboardingBanner: React.FC<OnboardingBannerProps> = ({ webhookUrl, 
             </div>
           </div>
           <button
-            onClick={() => setDismissed(true)}
+            onClick={handleDismiss}
             className="text-xs text-purple-300 hover:text-white underline"
           >
             Dismiss
@@ -101,6 +114,7 @@ export const OnboardingBanner: React.FC<OnboardingBannerProps> = ({ webhookUrl, 
                 Save
               </button>
             </form>
+            {keyError && <p className="text-[10px] text-rose-400 font-medium mt-1">{keyError}</p>}
           </div>
 
           {/* Step 3 */}

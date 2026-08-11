@@ -296,31 +296,37 @@ const AccountsPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('q') ?? ''
   const statusFilter = (searchParams.get('status') ?? '') as Status | ''
-  const [activeSegment, setActiveSegment] = useState<SegmentType>('all')
+  // Segment persisted in URL so refresh / link-sharing works
+  const activeSegment = (searchParams.get('segment') ?? 'all') as SegmentType
   const page = parseInt(searchParams.get('page') ?? '1', 10)
   const PAGE_SIZE = 10
 
   const setSearch = (val: string) => setSearchParams(p => { val ? p.set('q', val) : p.delete('q'); p.set('page', '1'); return p }, { replace: true })
   const setStatusFilter = (val: Status | '') => setSearchParams(p => { val ? p.set('status', val) : p.delete('status'); p.set('page', '1'); return p }, { replace: true })
   const setPage = (fn: (p: number) => number) => setSearchParams(p => { p.set('page', String(fn(parseInt(p.get('page') ?? '1', 10)))); return p }, { replace: true })
+  const setActiveSegment = (seg: SegmentType) => setSearchParams(p => {
+    seg === 'all' ? p.delete('segment') : p.set('segment', seg)
+    p.set('page', '1')
+    return p
+  }, { replace: true })
 
   useEffect(() => { document.title = 'Accounts | Pulse' }, [])
 
   const debouncedSearch = useDebouncedValue(search, 300)
 
-  // Map Segment filter choices to API params
-  const effectiveStatus = activeSegment === 'past_due' ? 'past_due' : activeSegment === 'trialing' ? 'trialing' : statusFilter || undefined
-  const { data, isLoading } = useAccounts(page, PAGE_SIZE, effectiveStatus, undefined, debouncedSearch || undefined)
+  // Map segment to API query params — filtering happens server-side across ALL pages
+  const effectiveStatus: Status | undefined =
+    activeSegment === 'past_due' ? 'past_due'
+    : activeSegment === 'trialing' ? 'trialing'
+    : (statusFilter || undefined) as Status | undefined
 
-  let accounts: Account[] = data?.data ?? []
+  const extraParams: Record<string, string | number> = {}
+  if (activeSegment === 'enterprise') extraParams.mrr_gte = 50000   // $500+ MRR
+  if (activeSegment === 'at_risk') extraParams.health_score_lt = 40  // health < 40
 
-  // Client-side Segment Filter refinements for Enterprise ($500+) and At-Risk
-  if (activeSegment === 'enterprise') {
-    accounts = accounts.filter(a => (a.mrr_cents || 0) >= 50000)
-  } else if (activeSegment === 'at_risk') {
-    accounts = accounts.filter(a => (a.health_score || 100) < 40)
-  }
+  const { data, isLoading } = useAccounts(page, PAGE_SIZE, effectiveStatus, undefined, debouncedSearch || undefined, extraParams)
 
+  const accounts: Account[] = data?.data ?? []
   const pagination = data?.pagination
   const totalPages = pagination?.totalPages ?? 1
   const total = pagination?.total ?? 0

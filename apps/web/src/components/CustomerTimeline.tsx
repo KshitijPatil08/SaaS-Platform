@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Zap, Clock, ShieldAlert } from 'lucide-react'
+import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Zap, Clock, ChevronDown, ChevronRight } from 'lucide-react'
 
 export interface TimelineEvent {
   id: string
@@ -57,6 +57,72 @@ function getEventMeta(name: string) {
   }
 }
 
+/** Render a single event card with optional collapsible payload */
+const EventCard: React.FC<{ evt: TimelineEvent; idx: number }> = ({ evt, idx }) => {
+  const [open, setOpen] = useState(false)
+  const meta = getEventMeta(evt.name)
+  const dateStr = new Date(evt.occurred_at || evt.created_at).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+
+  // Filter payload to primitive values for display (skip null/objects/arrays)
+  const payloadEntries = evt.payload
+    ? Object.entries(evt.payload).filter(([, v]) => v !== null && typeof v !== 'object')
+    : []
+
+  return (
+    <motion.div
+      key={evt.id || idx}
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: idx * 0.04 }}
+      className="relative pl-6"
+    >
+      {/* Timeline Node Bullet */}
+      <div className={`absolute -left-[11px] top-1 w-5 h-5 rounded-full ${meta.bg} border-2 flex items-center justify-center shadow-sm`}>
+        {meta.icon}
+      </div>
+
+      {/* Card Container */}
+      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${meta.badge}`}>
+            {meta.label}
+          </span>
+          <span className="text-[10px] font-mono text-slate-400">{dateStr}</span>
+        </div>
+        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 capitalize">
+          {evt.name.replace(/_/g, ' ')}
+        </p>
+
+        {/* Collapsible payload details */}
+        {payloadEntries.length > 0 && (
+          <div>
+            <button
+              onClick={() => setOpen(o => !o)}
+              className="flex items-center gap-1 text-[10px] text-purple-500 hover:text-purple-700 font-semibold mt-1 transition-colors"
+            >
+              {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              {open ? 'Hide' : 'Show'} details ({payloadEntries.length} fields)
+            </button>
+            {open && (
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 bg-white dark:bg-slate-800/60 rounded-lg p-2 border border-slate-100 dark:border-slate-700">
+                {payloadEntries.map(([k, v]) => (
+                  <React.Fragment key={k}>
+                    <span className="text-[10px] font-bold text-slate-400 capitalize truncate">{k.replace(/_/g, ' ')}</span>
+                    <span className="text-[10px] font-mono text-slate-700 dark:text-slate-300 truncate">{String(v)}</span>
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
 export const CustomerTimeline: React.FC<CustomerTimelineProps> = ({ events, customerName }) => {
   if (!events || events.length === 0) {
     return (
@@ -75,44 +141,9 @@ export const CustomerTimeline: React.FC<CustomerTimelineProps> = ({ events, cust
       </div>
 
       <div className="relative border-l-2 border-slate-100 dark:border-slate-800 ml-3 space-y-4 pt-1">
-        {events.map((evt, idx) => {
-          const meta = getEventMeta(evt.name)
-          const dateStr = new Date(evt.occurred_at || evt.created_at).toLocaleString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-
-          return (
-            <motion.div
-              key={evt.id || idx}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: idx * 0.04 }}
-              className="relative pl-6"
-            >
-              {/* Timeline Node Bullet */}
-              <div className={`absolute -left-[11px] top-1 w-5 h-5 rounded-full ${meta.bg} border-2 flex items-center justify-center shadow-sm`}>
-                {meta.icon}
-              </div>
-
-              {/* Card Container */}
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 space-y-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${meta.badge}`}>
-                    {meta.label}
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400">{dateStr}</span>
-                </div>
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 capitalize">
-                  {evt.name.replace(/_/g, ' ')}
-                </p>
-              </div>
-            </motion.div>
-          )
-        })}
+        {events.map((evt, idx) => (
+          <EventCard key={evt.id || idx} evt={evt} idx={idx} />
+        ))}
       </div>
     </div>
   )

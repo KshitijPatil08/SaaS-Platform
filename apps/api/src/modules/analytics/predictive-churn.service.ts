@@ -1,5 +1,6 @@
 import { prisma } from '../shared/lib/prisma'
 import { kpiCache } from '../shared/lib/kpi-cache'
+import { healthScoreService } from './health-score.service'
 
 export interface PredictiveRiskAccount {
   customerId: string
@@ -21,9 +22,10 @@ export const predictiveChurnService = {
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
+    // Load tenant's custom signal weights once — O(1) DB read, reused for every customer
+    const weights = await healthScoreService.loadCompanyWeights(companyId)
+
     // Load customers + their latest health score + last event timestamp
-    // in a single efficient query via Prisma relations.
-    // O(K) where K = active/at-risk customer count.
     const customers = await prisma.customer.findMany({
       where: {
         company_id: companyId,
@@ -37,13 +39,11 @@ export const predictiveChurnService = {
         mrr_cents: true,
         created_at: true,
         trial_ends_at: true,
-        // Latest event: used for real activity decay scoring
         events: {
           orderBy: { occurred_at: 'desc' },
           take: 1,
           select: { occurred_at: true },
         },
-        // Latest health score: compounds our signal accuracy
         health_scores: {
           orderBy: { computed_at: 'desc' },
           take: 1,
@@ -52,7 +52,6 @@ export const predictiveChurnService = {
       },
     })
 
-    // Compute real 30-day churn rate denominator from actual churn history
     const [recentChurnCount, startingBase] = await Promise.all([
       prisma.churnEvent.count({
         where: { company_id: companyId, churned_at: { gte: thirtyDaysAgo } },
@@ -66,44 +65,48 @@ export const predictiveChurnService = {
     const atRiskAccounts: PredictiveRiskAccount[] = []
     let totalAtRiskMrrCents = 0
 
+    // Normalize weights — payment is the strongest churn predictor across industries
+    const paymentWeight = weights.paymentWeightPct / 100
+    const activityWeight = weights.eventActivityWeightPct / 100
+
     for (const c of customers) {
       let riskScore = 10 // conservative baseline
 
-      // ── Signal 1: Payment Status ─────────────────────────────────────────────
+      // ── Signal 1: Payment Status (scaled by paymentWeightPct) ─────────────
+      // paymentWeight default = 0.4, so max contribution from payment = 40 pts
       if (c.status === 'past_due') {
-        riskScore += 55   // payment failure is strongest churn predictor
+        riskScore += 55 * paymentWeight * 2   // payment failure is the strongest churn predictor
       } else if (c.status === 'trialing') {
-        // Trial expiry proximity
         if (c.trial_ends_at) {
           const daysLeft = Math.ceil((new Date(c.trial_ends_at).getTime() - now) / 86_400_000)
-          if (daysLeft <= 3) riskScore += 35
-          else if (daysLeft <= 7) riskScore += 20
+          if (daysLeft <= 3) riskScore += 35 * paymentWeight * 2
+          else if (daysLeft <= 7) riskScore += 20 * paymentWeight * 2
           else riskScore += 10
         } else {
           riskScore += 20
         }
       }
 
-      // ── Signal 2: Real Activity Decay (days since last event) ────────────────
+      // ── Signal 2: Real Activity Decay (scaled by eventActivityWeightPct) ──
       const lastEventDate = c.events[0]
         ? new Date(c.events[0].occurred_at)
         : new Date(c.created_at)
       const daysInactive = Math.floor((now - lastEventDate.getTime()) / 86_400_000)
 
-      if (daysInactive > 30) riskScore += 30
-      else if (daysInactive > 14) riskScore += 18
-      else if (daysInactive > 7) riskScore += 8
+      if (daysInactive > 30) riskScore += 30 * activityWeight * 2
+      else if (daysInactive > 14) riskScore += 18 * activityWeight * 2
+      else if (daysInactive > 7) riskScore += 8 * activityWeight * 2
       else if (daysInactive <= 3) riskScore -= 5  // recently active reduces risk
 
-      // ── Signal 3: Health Score Compound (if available) ──────────────────────
+      // ── Signal 3: Health Score Compound ─────────────────────────────────
       const latestHealth = c.health_scores[0]?.score
       if (latestHealth !== undefined) {
         if (latestHealth < 40) riskScore += 20
         else if (latestHealth < 70) riskScore += 8
-        else riskScore -= 8  // healthy customers get risk reduction
+        else riskScore -= 8
       }
 
-      // ── Signal 4: Account Age (new accounts churn faster) ───────────────────
+      // ── Signal 4: Account Age ────────────────────────────────────────────
       const ageDays = Math.floor((now - new Date(c.created_at).getTime()) / 86_400_000)
       if (ageDays < 14) riskScore += 12
       else if (ageDays < 30) riskScore += 6

@@ -78,6 +78,13 @@ router.post('/reset-password', async (req: Request, res: Response) => {
   }
 })
 
+// POST /api/auth/logout (protected or sessionless client cleanup)
+router.post('/logout', (_req: Request, res: Response) => {
+  res.clearCookie('access_token')
+  res.clearCookie('refresh_token')
+  return res.json({ success: true })
+})
+
 // POST /api/auth/invite (protected)
 router.post('/invite', verifyJwt, requireRole('OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   try {

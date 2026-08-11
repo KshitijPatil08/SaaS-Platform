@@ -16,6 +16,7 @@ import DocsPage from './pages/DocsPage'
 import StatusPage from './pages/StatusPage'
 import { ThemeProvider } from './hooks/useTheme'
 import HotkeyCheatSheet from './components/HotkeyCheatSheet'
+import ErrorBoundary from './components/ErrorBoundary'
 
 import { Menu, BarChart3 } from 'lucide-react'
 
@@ -127,20 +128,22 @@ function AppLayout() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <Router>
-          <AuthRedirect />
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/landing" element={<LandingPage />} />
-            <Route path="/docs" element={<DocsPage />} />
-            <Route path="/status" element={<StatusPage />} />
-            <Route path="/*" element={<AppLayout />} />
-          </Routes>
-        </Router>
-      </QueryClientProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <Router>
+            <AuthRedirect />
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/landing" element={<LandingPage />} />
+              <Route path="/docs" element={<DocsPage />} />
+              <Route path="/status" element={<StatusPage />} />
+              <Route path="/*" element={<AppLayout />} />
+            </Routes>
+          </Router>
+        </QueryClientProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   )
 }

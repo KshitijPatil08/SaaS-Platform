@@ -21,12 +21,14 @@ export interface PredictiveChurnResponse {
 }
 
 export const PredictiveRiskWidget: React.FC = () => {
-  const { data, isLoading } = useQuery<PredictiveChurnResponse>({
+  const { data, isLoading, isError } = useQuery<PredictiveChurnResponse>({
     queryKey: ['predictive-churn'],
     queryFn: async () => {
       const { data } = await api.get('/api/analytics/predictive-churn')
       return data
     },
+    staleTime: 2 * 60 * 1000, // aligned to server's 2-min cache TTL
+    retry: 2,
   })
 
   if (isLoading) {
@@ -38,8 +40,23 @@ export const PredictiveRiskWidget: React.FC = () => {
     )
   }
 
+  if (isError) {
+    return (
+      <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-amber-200 dark:border-amber-800/50 space-y-3">
+        <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+          <AlertTriangle className="h-5 w-5 shrink-0" />
+          <p className="text-sm font-bold">Churn forecast unavailable</p>
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          The predictive churn model could not be loaded. This does not mean your accounts are safe — please check your dashboard manually or try refreshing.
+        </p>
+      </div>
+    )
+  }
+
   const atRiskMrrUsd = Math.round((data?.totalAtRiskMrrCents || 0) / 100)
   const accounts = data?.accounts || []
+
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-700 space-y-5">
