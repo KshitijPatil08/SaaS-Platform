@@ -74,7 +74,8 @@ router.put('/rules', async (req: Request, res: Response) => {
   // Don't await — HTTP response returns without waiting for potentially 100s of customers.
   setImmediate(() => {
     healthScoreService.recomputeAll(companyId).catch((err) => {
-      console.error(`[health-rules] Background recompute failed for ${companyId}:`, err)
+      // SECURITY: Do not log companyId (sensitive identifier) in plain text.
+      console.error('[health-rules] Background recompute failed for [companyId redacted]:', err)
     })
   })
 

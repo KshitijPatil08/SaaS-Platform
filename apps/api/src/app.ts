@@ -4,6 +4,7 @@ import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import cookieParser from 'cookie-parser'
 import dotenv from 'dotenv'
+import { doubleCsrf } from 'csrf-csrf'
 
 import { config } from './modules/shared/lib/config'
 import { createRateLimitStore } from './modules/shared/lib/rateLimitStore'
@@ -107,6 +108,34 @@ app.use(express.json({ limit: '1mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser(config.cookieSecret))
 
+// ── CSRF Protection (double-submit cookie) ────────────────────────────────────
+// Webhooks are authenticated by Stripe signature — not session/cookie — so
+// they MUST be excluded from CSRF checks. All other state-mutating /api/*
+// routes are protected by the CSRF middleware below.
+// The frontend reads the CSRF token cookie and sends it as the
+// 'x-csrf-token' request header on every POST/PUT/PATCH/DELETE.
+const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
+  getSecret: () => config.cookieSecret,
+  // For a JWT/stateless API use the Authorization header value (or IP) as the
+  // per-session identifier so tokens can't be replayed across sessions.
+  getSessionIdentifier: (req) =>
+    (req.headers['authorization'] as string | undefined) ?? req.ip ?? 'anon',
+  cookieName: '__Host-psm.x-csrf-token',
+  cookieOptions: {
+    sameSite: 'strict',
+    secure: config.isProduction,
+    httpOnly: true,
+  },
+  ignoredMethods: ['GET', 'HEAD', 'OPTIONS'],
+  getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string,
+})
+
+// Expose a GET endpoint so the client can fetch the initial token
+app.get('/api/csrf-token', (req, res) => {
+  const token = generateCsrfToken(req, res)
+  res.json({ csrfToken: token })
+})
+
 // Health Check (before auth)
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
@@ -134,7 +163,12 @@ import { apiKeyMiddleware } from './modules/api-keys/api-key.middleware'
 // it and sets req.companyId so all protected routes below work transparently.
 app.use(apiKeyMiddleware)
 
-// Auth routes (public)
+// CSRF protection — applied globally to all /api/* routes.
+// Webhook routes (/webhooks/*) are excluded: they live outside /api/ and
+// are already authenticated via Stripe signature verification.
+app.use('/api', doubleCsrfProtection)
+
+// Auth routes (public — CSRF already applied via the /api prefix above)
 app.use('/api/auth', authRouter)
 
 // Protected Routes (planGate enforces customer cap per subscription tier)
@@ -165,7 +199,16 @@ app.use('/api/status', statusRouter)
 // Vendor Billing — Pulse's own subscription management
 app.use('/api/vendor-billing', verifyJwt, vendorBillingRouter)
 
-// Stripe Webhooks (raw body required)
+// Stripe Webhooks (raw body required — CSRF excluded, Stripe signature is the auth)
+// Rate-limited separately: public endpoint must not be left open to DoS.
+const webhookLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300,                  // Stripe sends at most ~10 events/s in bursts; 300 is generous
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many webhook requests, please try again later.' },
+})
+app.use('/webhooks/', webhookLimiter)
 app.use('/webhooks/stripe', stripeWebhookRouter)
 app.use('/webhooks/stripe-vendor', vendorWebhookRouter)
 

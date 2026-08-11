@@ -51,7 +51,9 @@ router.post('/', async (req: Request, res: Response) => {
     event = stripe.webhooks.constructEvent(req.body, sig, config.stripeVendorWebhookSecret)
   } catch (err) {
     console.error('[vendor-webhook] Signature verification failed:', err)
-    return res.status(400).send(`Webhook Error: ${(err as Error).message}`)
+    // SECURITY: Never reflect exception text into HTTP response — it may contain
+    // attacker-controlled content from the malformed request body.
+    return res.status(400).send('Webhook signature verification failed')
   }
 
   try {

@@ -10,7 +10,11 @@ export const slackService = {
    * the Express response back to Stripe (which retries on timeout).
    */
   sendSlackAlert(webhookUrl: string, message: { text: string; blocks?: any[] }): void {
-    if (!webhookUrl || !webhookUrl.startsWith('http')) return
+    // SECURITY: Only allow official Slack Incoming Webhook URLs to prevent SSRF.
+    // An attacker who can write to the DB's slack_webhook_url field must not be
+    // able to pivot to internal services (Redis, metadata endpoint, etc.).
+    const SLACK_WEBHOOK_PREFIX = 'https://hooks.slack.com/'
+    if (!webhookUrl || !webhookUrl.startsWith(SLACK_WEBHOOK_PREFIX)) return
 
     // Fire-and-forget: enqueue the HTTP request but do not block the caller
     fetch(webhookUrl, {

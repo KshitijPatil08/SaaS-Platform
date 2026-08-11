@@ -52,7 +52,9 @@ router.post('/', async (req, res) => {
     event = verifyWebhookSignature(req.body, sig, webhookSecret)
   } catch (err) {
     console.error('Stripe signature verification failed:', err)
-    return res.status(400).send(`Webhook Error: ${(err as Error).message}`)
+    // SECURITY: Never reflect exception text into HTTP response — it may contain
+    // attacker-controlled content from the malformed request body.
+    return res.status(400).send('Webhook signature verification failed')
   }
 
   try {

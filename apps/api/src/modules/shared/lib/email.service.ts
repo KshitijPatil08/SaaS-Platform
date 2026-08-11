@@ -22,11 +22,23 @@ export interface EmailResult {
 
 function htmlToText(html: string): string {
   return html
+    // SECURITY: Explicit removal of script/style blocks first (handles multi-char sequences)
+    // before the generic tag stripper runs — prevents partial-match bypass.
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    // Convert common block elements to whitespace before stripping tags
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n\n')
-    .replace(/<[^>]+>/g, '')
+    .replace(/<\/?(div|li|tr|td|th|h[1-6])[^>]*>/gi, '\n')
+    // Strip all remaining tags — including ones with whitespace before '>'
+    .replace(/<[^>]*>/g, '')
+    // Decode HTML entities
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
     .trim()
 }
 
