@@ -20,7 +20,7 @@ Pulse SaaS is an enterprise-grade, multi-tenant revenue analytics engine designe
                                                 │
                                   ┌─────────────▼─────────────┐
                                   │    Express API Gateway    │
-                                  │  Helmet / Cors / Auth     │
+                                  │  Helmet / CORS / CSRF     │
                                   └─────────────┬─────────────┘
                                                 │
                  ┌──────────────────────────────┼──────────────────────────────┐

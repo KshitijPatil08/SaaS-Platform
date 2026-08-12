@@ -15,6 +15,7 @@ Comprehensive breakdown of technologies, libraries, frameworks, environment vari
 | **Auth & Security** | `jsonwebtoken`, `bcrypt`, `speakeasy`, `crypto` | JWT HttpOnly cookies, bcrypt (12 rounds), TOTP MFA, SHA-256 API keys |
 | **Request Validation**| `zod` | Type-safe schema validation (`validateQuery`, `validateBody`) |
 | **Billing Integration**| Stripe SDK (`stripe`) | Idempotent webhook handling & subscription sync |
+| **CSRF Protection** | `csrf-csrf` | Double-submit cookie pattern; `doubleCsrfProtection` middleware globally applied after webhook routes |
 | **Security Middleware**| `helmet`, `cors`, `express-rate-limit`, `cookie-parser` | CSP, HSTS, CORS origin protection, cookie signing |
 | **Rate Limit Store** | `ioredis` + `RedisRateLimitStore` | Shared Redis counter with fail-open fallback |
 | **Caching Engine** | In-Process Memory Cache (`kpi-cache.ts`) | TTL Map with boot-time cache warm-up (`warmUpCache`) |
@@ -64,9 +65,10 @@ apps/api/package.json
 ├── express & cors & helmet   # HTTP server & security headers
 ├── jsonwebtoken & bcrypt     # JWT authentication & password hashing
 ├── speakeasy                 # TOTP MFA verification
+├── csrf-csrf                 # CSRF double-submit cookie protection (replaces deprecated csurf)
 ├── zod                       # Request validation
 ├── stripe                    # Billing webhooks & API
-├── ioredis                   # Distributed rate-limit store
+└── ioredis                   # Distributed rate-limit store
 
 apps/web/package.json
 ├── react & react-dom         # Core UI framework

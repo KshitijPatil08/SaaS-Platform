@@ -125,7 +125,7 @@ app.use(cookieParser(config.cookieSecret))
 // ── Webhook Routes (registered BEFORE CSRF middleware) ────────────────────────
 // Stripe webhooks are authenticated via HMAC signature, NOT cookies, so they
 // are legitimately exempt from CSRF token checks. Registering them here —
-// before app.use(csrfProtection) — means they are processed by Express
+// before app.use(doubleCsrfProtection) — means they are processed by Express
 // before the CSRF middleware runs, without needing a CSRF exemption flag.
 // Rate-limited separately to prevent DoS on the public webhook endpoint.
 const webhookLimiter = rateLimit({

@@ -34,6 +34,7 @@ Pulse is a white-label, self-hostable, multi-tenant SaaS intelligence engine and
 - **Role-Based Access Control (RBAC)**: Fine-grained permissions (`OWNER`, `ADMIN`, `ANALYST`, `DEVELOPER`).
 - **Security Audit Logs**: Comprehensive security event logging with IP, user-agent, action metadata, and pageable audit log viewer with rate-limit IP lockout resets.
 - **Two-Factor Authentication (2FA)**: TOTP MFA enrollment and verification.
+- **CSRF Protection**: Double-submit cookie pattern via `csrf-csrf` — all mutating API routes require a valid `x-csrf-token` header.
 - **Executive Board Deck Modal**: Generate print-ready PDF/HTML board reports summarizing core SaaS metrics for investor updates.
 
 ---
@@ -43,7 +44,7 @@ Pulse is a white-label, self-hostable, multi-tenant SaaS intelligence engine and
 * **Frontend**: React 18, TypeScript, Vite, TailwindCSS, Framer Motion, Recharts, TanStack Query, Lucide Icons
 * **Backend**: Node.js, Express, TypeScript, Prisma ORM
 * **Database**: SQLite (dev) / PostgreSQL (production) with DB indexes on all tenant query paths
-* **Auth & Security**: JWT (HttpOnly cookies), bcrypt (12 rounds), TOTP MFA, Helmet, CORS, Express Rate Limit, SHA-256 API Keys
+* **Auth & Security**: JWT (HttpOnly cookies), bcrypt (12 rounds), TOTP MFA, Helmet, CORS, Express Rate Limit, SHA-256 API Keys, `csrf-csrf` (double-submit CSRF protection)
 * **Caching**: In-process TTL Cache (`kpi-cache.ts`) with automatic boot-time cache warm-up (`warmUpCache()`)
 
 ---
