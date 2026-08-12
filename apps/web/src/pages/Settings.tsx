@@ -697,11 +697,20 @@ const Settings: React.FC = () => {
             {!profile.admin?.mfaEnabled ? (
               <div className="space-y-4 pt-1">
                 {!mfaSecret ? (
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-700/60">
-                    <p className="text-xs text-slate-600 dark:text-slate-400">Generate a secret key to pair your preferred authenticator app.</p>
-                    <button type="button" onClick={handleStartMfaEnroll} disabled={mfaLoading} className="px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold rounded-xl hover:opacity-90 transition-opacity shrink-0">
-                      {mfaLoading ? 'Generating Secret…' : 'Enroll 2FA'}
-                    </button>
+                  <div className="flex flex-col gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-700/60">
+                    <p className="text-xs text-slate-600 dark:text-slate-400">Generate a secret key to pair your preferred authenticator app. For security, please verify your current password.</p>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                      <input
+                        type="password"
+                        placeholder="Current Password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        className="flex-1 px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                      />
+                      <button type="button" onClick={handleStartMfaEnroll} disabled={mfaLoading || !currentPassword} className="px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold rounded-xl hover:opacity-90 transition-opacity shrink-0 disabled:opacity-50">
+                        {mfaLoading ? 'Generating Secret…' : 'Enroll 2FA'}
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-xl space-y-4 border border-slate-200 dark:border-slate-700">

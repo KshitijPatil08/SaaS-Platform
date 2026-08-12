@@ -1,7 +1,9 @@
-import React from 'react'
+import React, { useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Printer, X, FileText, Download, TrendingUp, Zap, Grid, ShieldCheck } from 'lucide-react'
 import { useKpis, useCohorts } from '../hooks/useKpis'
+import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
 
 interface ExecutiveReportModalProps {
   isOpen: boolean
@@ -11,6 +13,8 @@ interface ExecutiveReportModalProps {
 export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({ isOpen, onClose }) => {
   const { data: kpis } = useKpis()
   const { data: cohorts } = useCohorts()
+  const reportRef = useRef<HTMLDivElement>(null)
+  const [isExporting, setIsExporting] = useState(false)
 
   if (!isOpen) return null
 
@@ -24,6 +28,29 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({ isOp
 
   const handlePrint = () => {
     window.print()
+  }
+
+  const handleDownloadPDF = async () => {
+    if (!reportRef.current) return
+    setIsExporting(true)
+    try {
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2, // High resolution for better text clarity
+        useCORS: true,
+      })
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
+      pdf.save(`pulse-executive-report-${new Date().toISOString().slice(0, 10)}.pdf`)
+    } catch (e) {
+      console.error('Failed to generate PDF', e)
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   return (
@@ -43,10 +70,10 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({ isOp
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="relative w-full max-w-4xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden z-10 p-8 space-y-6 print:border-none print:shadow-none print:w-full print:max-w-none print:p-0 print:bg-white print:text-black"
+          className="relative w-full max-w-4xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden z-10 space-y-0 print:border-none print:shadow-none print:w-full print:max-w-none print:bg-white print:text-black"
         >
-          {/* Header Controls */}
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 print:hidden">
+          {/* Header Controls (Outside of the printable area) */}
+          <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800 print:hidden bg-slate-50 dark:bg-slate-900/50">
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded-xl bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400">
                 <FileText className="h-5 w-5" />
@@ -57,18 +84,28 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({ isOp
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleDownloadPDF}
+                disabled={isExporting}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-500/20 disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" /> {isExporting ? 'Generating PDF...' : 'Download PDF'}
+              </button>
               <button
                 onClick={handlePrint}
                 className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition-colors shadow-md shadow-purple-500/20"
               >
-                <Printer className="h-4 w-4" /> Print / Export PDF
+                <Printer className="h-4 w-4" /> Print
               </button>
-              <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
-                <X className="h-5 w-5" />
+              <button onClick={onClose} className="flex items-center gap-2 px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
+                <X className="h-4 w-4" /> Cancel
               </button>
             </div>
           </div>
+
+          {/* Printable Report Content */}
+          <div ref={reportRef} className="p-8 space-y-6 print:p-0 bg-white dark:bg-slate-900">
 
           {/* Printable Report Header */}
           <div className="flex items-center justify-between pb-6 border-b border-slate-200">
@@ -149,6 +186,7 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({ isOp
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
               Revenue momentum remains strong with an active Quick Ratio of {quickRatio.toFixed(1)}x. Monthly customer retention averages {cohorts?.grid?.[0]?.retention?.[1] || 88}% at M1. Background daily snapshot jobs and automated Dunning recovery systems remain active.
             </p>
+          </div>
           </div>
         </motion.div>
       </div>
