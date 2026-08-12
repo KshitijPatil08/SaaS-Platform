@@ -64,6 +64,7 @@ const Dashboard: React.FC = () => {
   const { data: mrrSeries } = useMrrSeries();
   const { data: profile } = useProfile();
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -110,6 +111,7 @@ const Dashboard: React.FC = () => {
 
   const handleExport = async () => {
     setExporting(true);
+    setExportError(null);
     try {
       const res = await api.get('/api/export?format=csv', { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([res.data]));
@@ -120,8 +122,17 @@ const Dashboard: React.FC = () => {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error('Export failed', e);
+    } catch (e: any) {
+      const status = e?.response?.status;
+      if (status === 402) {
+        setExportError('Export not available on your current plan. Upgrade in Billing to unlock CSV exports.');
+      } else if (status === 401 || status === 403) {
+        setExportError('Session expired — please refresh the page and log in again.');
+      } else {
+        setExportError('Export failed. Please try again in a moment.');
+      }
+      // Auto-dismiss the error banner after 6 seconds
+      setTimeout(() => setExportError(null), 6000);
     } finally {
       setExporting(false);
     }
@@ -195,11 +206,19 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Error banner */}
+      {/* API data error banner */}
       {error && (
         <div className="flex items-center gap-3 p-4 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-700 dark:text-rose-400 text-sm">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>Could not load metrics. Make sure you're logged in and the API is running.</span>
+        </div>
+      )}
+
+      {/* Export error banner — shown when CSV export fails (e.g. plan gate, session) */}
+      {exportError && (
+        <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-700 dark:text-amber-300 text-sm">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{exportError}</span>
         </div>
       )}
 

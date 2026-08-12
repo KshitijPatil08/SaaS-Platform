@@ -151,7 +151,10 @@ const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
   // Session identifier — use the signed auth cookie (or fall back to empty string)
   // so the HMAC-bound token is tied to this browser session.
   getSessionIdentifier: (req) => (req.cookies?.['psm.sid'] as string) ?? '',
-  cookieName: '__Host-psm.csrf',
+  // __Host- prefix enforces Secure + Path=/ + no Domain — production only.
+  // In development (HTTP), browsers silently reject __Host- cookies, breaking
+  // CSRF validation. Use a plain name in dev so the cookie is accepted on localhost.
+  cookieName: config.isProduction ? '__Host-psm.csrf' : 'psm.csrf',
   cookieOptions: {
     sameSite: 'strict',
     secure: config.isProduction,

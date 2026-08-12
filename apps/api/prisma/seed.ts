@@ -20,6 +20,7 @@ async function main() {
     data: {
       name: 'Acme SaaS Corp',
       stripe_id: 'cus_demo_acme',
+      plan_tier: 'pro',     // demo gets Pro so all features (exports, full analytics) are available
       admins: {
         create: {
           email: 'admin@pulse.example',
