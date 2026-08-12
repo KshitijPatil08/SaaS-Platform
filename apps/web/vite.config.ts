@@ -18,12 +18,14 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react':    ['react', 'react-dom', 'react-router-dom'],
-          'vendor-charts':   ['recharts'],
-          'vendor-motion':   ['framer-motion'],
-          'vendor-query':    ['@tanstack/react-query'],
-          'vendor-icons':    ['lucide-react'],
+        manualChunks: (id: string) => {
+          if (id.includes('node_modules')) {
+            if (id.includes('react')) return 'vendor-react'
+            if (id.includes('recharts')) return 'vendor-charts'
+            if (id.includes('framer-motion')) return 'vendor-motion'
+            if (id.includes('@tanstack')) return 'vendor-query'
+            if (id.includes('lucide')) return 'vendor-icons'
+          }
         },
       },
     },
