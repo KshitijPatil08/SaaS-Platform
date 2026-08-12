@@ -595,8 +595,8 @@ const Settings: React.FC = () => {
                 <input
                   type="password"
                   placeholder="Initial password (optional)"
-                  value={invitePassword}
-                  onChange={e => setInvitePassword(e.target.value)}
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
                   className="px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
                 />
                 <select
