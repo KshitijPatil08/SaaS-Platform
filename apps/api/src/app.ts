@@ -4,7 +4,7 @@ import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import cookieParser from 'cookie-parser'
 import dotenv from 'dotenv'
-import csurf from 'csurf'
+import { doubleCsrf } from 'csrf-csrf'
 
 import { config } from './modules/shared/lib/config'
 import { createRateLimitStore } from './modules/shared/lib/rateLimitStore'
@@ -140,33 +140,37 @@ app.use('/webhooks/stripe', stripeWebhookRouter)
 app.use('/webhooks/stripe-vendor', vendorWebhookRouter)
 
 // ── CSRF Protection ───────────────────────────────────────────────────────────
-// csurf (double-submit cookie) is applied AFTER webhook routes but BEFORE all
-// API routes — every API route handler registered below this line is protected.
-// GET/HEAD/OPTIONS are ignored by csurf by default.
+// csrf-csrf (double-submit cookie pattern) is applied AFTER webhook routes but
+// BEFORE all API routes — every API route handler registered below is protected.
+// GET/HEAD/OPTIONS are safe methods and are excluded from validation by default.
 // The frontend must:
-//   1. Read the CSRF token from the signed cookie (set by GET /api/csrf-token)
+//   1. Fetch the CSRF token via GET /api/csrf-token (token returned in JSON)
 //   2. Send it as the 'x-csrf-token' request header on every POST/PUT/PATCH/DELETE
-const csrfProtection = csurf({
-  cookie: {
-    key: '__Host-psm.csrf',
+const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
+  getSecret: () => config.cookieSecret,
+  // Session identifier — use the signed auth cookie (or fall back to empty string)
+  // so the HMAC-bound token is tied to this browser session.
+  getSessionIdentifier: (req) => (req.cookies?.['psm.sid'] as string) ?? '',
+  cookieName: '__Host-psm.csrf',
+  cookieOptions: {
     sameSite: 'strict',
     secure: config.isProduction,
-    httpOnly: false, // JS-readable so the frontend can read and forward the token
-    signed: true,
+    httpOnly: true,
+    path: '/',
   },
-  value: (req) => req.headers['x-csrf-token'] as string,
+  getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string,
 })
-app.use(csrfProtection)
+app.use(doubleCsrfProtection)
 
-// Health Check (before auth — GET only, csurf ignores GET by default)
+// Health Check (before auth — GET only, excluded from CSRF check by default)
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// Expose a GET endpoint so the client can fetch the initial CSRF token
-// csurf populates req.csrfToken() after the middleware runs
+// Expose a GET endpoint so the client can fetch the initial CSRF token.
+// generateCsrfToken sets the CSRF cookie and returns the token value.
 app.get('/api/csrf-token', (req, res) => {
-  res.json({ csrfToken: (req as any).csrfToken() })
+  res.json({ csrfToken: generateCsrfToken(req, res) })
 })
 
 // Token Refresh Middleware
