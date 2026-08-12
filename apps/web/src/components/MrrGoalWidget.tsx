@@ -90,6 +90,7 @@ export const MrrGoalWidget: React.FC = () => {
         </div>
         <button
           onClick={() => setEditing(e => !e)}
+          aria-label={editing ? 'Cancel editing revenue goal' : 'Edit revenue goal'}
           className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         >
           {editing ? <X className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}

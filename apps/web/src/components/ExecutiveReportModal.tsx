@@ -35,16 +35,37 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({ isOp
     setIsExporting(true)
     try {
       const canvas = await html2canvas(reportRef.current, {
-        scale: 2, // High resolution for better text clarity
+        scale: 2,       // 2x for sharp text at high DPI
         useCORS: true,
+        logging: false,
+        // Capture the full scrollable height, not just the visible viewport
+        windowWidth: reportRef.current.scrollWidth,
+        windowHeight: reportRef.current.scrollHeight,
       })
+
       const imgData = canvas.toDataURL('image/png')
+
+      // A4 dimensions in mm
       const pdf = new jsPDF('p', 'mm', 'a4')
-      
-      const pdfWidth = pdf.internal.pageSize.getWidth()
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
+      const pageWidthMm  = pdf.internal.pageSize.getWidth()   // 210mm
+      const pageHeightMm = pdf.internal.pageSize.getHeight()  // 297mm
+
+      // Scale the canvas width to fit the PDF page width exactly
+      const imgWidthMm  = pageWidthMm
+      const imgHeightMm = (canvas.height / canvas.width) * pageWidthMm
+
+      // How many PDF pages the full image needs
+      const totalPages = Math.ceil(imgHeightMm / pageHeightMm)
+
+      for (let page = 0; page < totalPages; page++) {
+        if (page > 0) pdf.addPage()
+
+        // Shift the image up by (page * pageHeightMm) so the correct
+        // slice of the image appears within the current page's viewport.
+        const yOffset = -(page * pageHeightMm)
+        pdf.addImage(imgData, 'PNG', 0, yOffset, imgWidthMm, imgHeightMm)
+      }
+
       pdf.save(`pulse-executive-report-${new Date().toISOString().slice(0, 10)}.pdf`)
     } catch (e) {
       console.error('Failed to generate PDF', e)

@@ -171,13 +171,15 @@ const Login: React.FC = () => {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1">Email address</label>
+          <label htmlFor="login-email" className="block text-xs font-semibold text-slate-300 mb-1">Email address</label>
           <input
+            id="login-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={mfaRequired}
             required
+            autoComplete="email"
             className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-purple-500 disabled:opacity-60 transition-colors"
           />
         </div>
@@ -185,7 +187,7 @@ const Login: React.FC = () => {
         {!mfaRequired && (
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-semibold text-slate-300">Password</label>
+              <label htmlFor="login-password" className="block text-xs font-semibold text-slate-300">Password</label>
               <button
                 type="button"
                 onClick={() => { setScreen('forgot'); setForgotEmail(email); setError(null) }}
@@ -195,10 +197,12 @@ const Login: React.FC = () => {
               </button>
             </div>
             <input
+              id="login-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              autoComplete="current-password"
               className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-purple-500 transition-colors"
             />
           </div>
