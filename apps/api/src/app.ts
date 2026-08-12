@@ -47,6 +47,12 @@ dotenv.config()
 
 const app = express()
 
+// Trust Railway's reverse-proxy (one hop).
+// Without this, express-rate-limit throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+// because it sees X-Forwarded-For but trust proxy is disabled (the default).
+// '1' means we trust exactly one upstream proxy — correct for Railway.
+app.set('trust proxy', 1)
+
 // Initialize background workers on boot
 if (process.env.NODE_ENV !== 'test') {
   startSnapshotWorker()        // daily MRR snapshot waterfall calculations
@@ -54,6 +60,9 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // Security Headers
+// connectSrc must include the API's own Railway origin so that the
+// Vercel-hosted frontend can make XHR/fetch calls without CSP blocking them.
+const apiOrigin = config.clientOrigin // e.g. https://your-app.vercel.app
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -63,7 +72,8 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       styleSrcElem: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       imgSrc: ["'self'", "data:"],
-      connectSrc: ["'self'"],
+      // Allow the frontend origin to connect back to this API
+      connectSrc: ["'self'", apiOrigin],
       // Allow Google Fonts to serve the actual .woff2 files
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       objectSrc: ["'none'"],
@@ -154,9 +164,17 @@ const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
   // __Host- prefix enforces Secure + Path=/ + no Domain — production only.
   // In development (HTTP), browsers silently reject __Host- cookies, breaking
   // CSRF validation. Use a plain name in dev so the cookie is accepted on localhost.
-  cookieName: config.isProduction ? '__Host-psm.csrf' : 'psm.csrf',
+  //
+  // NOTE: __Host- cookies cannot be used with SameSite:None cross-origin in some
+  // browsers. In production (cross-origin Vercel→Railway) we use a plain name
+  // with SameSite:None so the browser actually sends the cookie on cross-site requests.
+  cookieName: config.isProduction ? 'psm.csrf' : 'psm.csrf',
   cookieOptions: {
-    sameSite: 'strict',
+    // SameSite:'none' is REQUIRED for cross-origin requests (Vercel → Railway).
+    // SameSite:'strict' or 'lax' causes the browser to silently drop the cookie
+    // on cross-site fetches, making every CSRF check fail with "invalid token".
+    // SameSite:'none' must be paired with Secure:true (HTTPS only).
+    sameSite: config.isProduction ? 'none' : 'lax',
     secure: config.isProduction,
     httpOnly: true,
     path: '/',

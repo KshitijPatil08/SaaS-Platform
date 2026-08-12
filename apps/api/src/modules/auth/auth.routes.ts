@@ -31,16 +31,21 @@ router.post('/login', async (req: Request, res: Response) => {
     }
     const result = await authService.login({ email, password, mfaToken })
     if (result.tokens) {
-      res.cookie('access_token', result.tokens.accessToken, {
+      const isProduction = process.env.NODE_ENV === 'production'
+      // SameSite:'none' is required for cross-origin requests (Vercel → Railway).
+      // SameSite:'lax' silently drops cookies on cross-site POST requests.
+      // SameSite:'none' must be paired with Secure:true (HTTPS only).
+      const cookieOptions = {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        secure: isProduction,
+        sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
+      }
+      res.cookie('access_token', result.tokens.accessToken, {
+        ...cookieOptions,
         maxAge: 15 * 60 * 1000,
       })
       res.cookie('refresh_token', result.tokens.refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        ...cookieOptions,
         maxAge: 7 * 24 * 60 * 60 * 1000,
       })
     }
@@ -80,8 +85,14 @@ router.post('/reset-password', async (req: Request, res: Response) => {
 
 // POST /api/auth/logout (protected or sessionless client cleanup)
 router.post('/logout', (_req: Request, res: Response) => {
-  res.clearCookie('access_token')
-  res.clearCookie('refresh_token')
+  const isProduction = process.env.NODE_ENV === 'production'
+  const clearOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
+  }
+  res.clearCookie('access_token', clearOptions)
+  res.clearCookie('refresh_token', clearOptions)
   return res.json({ success: true })
 })
 
