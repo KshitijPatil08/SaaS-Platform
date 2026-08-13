@@ -1,4 +1,4 @@
-# 🔒 Pulse SaaS — Security Model & Defense-in-Depth
+# Pulse SaaS — Security Model & Defense-in-Depth
 
 Pulse SaaS is engineered for enterprise security, strict multi-tenant isolation, and zero-trust authentication across all application layers.
 
