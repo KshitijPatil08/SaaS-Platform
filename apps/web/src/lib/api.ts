@@ -39,14 +39,25 @@ api.interceptors.request.use(async (config) => {
 })
 
 // Centralized error handling
+// Debounce the auth:unauthorized event so that multiple simultaneous 401s
+// (e.g. parallel dashboard queries on first load) don't fire the redirect more
+// than once, and skip it entirely on /login and /register where a 401 is expected.
+let unauthorizedTimer: ReturnType<typeof setTimeout> | null = null
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // 401 = unauthenticated (no/expired JWT) — redirect to login.
-    // 403 can also be an expired/invalid CSRF token; invalidate the cache so
-    // the next request fetches a fresh token instead of redirecting to login.
-    if (error.response?.status === 401) {
-      window.dispatchEvent(new CustomEvent('auth:unauthorized'))
+    const publicPaths = ['/login', '/register']
+    const isPublicPage = publicPaths.some((p) => window.location.pathname.startsWith(p))
+
+    if (error.response?.status === 401 && !isPublicPage) {
+      // Debounce: only fire the redirect once per batch of 401 responses
+      if (!unauthorizedTimer) {
+        unauthorizedTimer = setTimeout(() => {
+          unauthorizedTimer = null
+          window.dispatchEvent(new CustomEvent('auth:unauthorized'))
+        }, 200)
+      }
     } else if (error.response?.status === 403) {
       // Invalidate cached CSRF token — it may have rotated or expired.
       csrfToken = null
@@ -64,3 +75,4 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+

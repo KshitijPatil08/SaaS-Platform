@@ -24,8 +24,13 @@ const Register: React.FC = () => {
         email,
         password,
       })
-      // Automatically log in after registration
+      // Auto-login after registration — the login endpoint sets HttpOnly cookies.
+      // We must await this fully before navigating so the browser can store the
+      // Set-Cookie headers. Then we hit /api/csrf-token to confirm the session
+      // is live before the dashboard's queries fire.
       await api.post('/api/auth/login', { email, password })
+      // Warm the CSRF cookie so the first dashboard mutation doesn't fail
+      await api.get('/api/csrf-token')
       navigate('/')
     } catch (err: any) {
       setError(err?.response?.data?.error || 'Registration failed')

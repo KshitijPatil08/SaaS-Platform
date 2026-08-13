@@ -15,6 +15,7 @@ export const OnboardingBanner: React.FC<OnboardingBannerProps> = ({ webhookUrl, 
   const [keySaved, setKeySaved] = useState(false)
   const [keyError, setKeyError] = useState<string | null>(null)
   const [seeding, setSeeding] = useState(false)
+  const [seedDone, setSeedDone] = useState(false)
   const [seedError, setSeedError] = useState<string | null>(null)
   // Persist dismiss across page reloads
   const [dismissed, setDismissed] = useState(() => {
@@ -44,6 +45,53 @@ export const OnboardingBanner: React.FC<OnboardingBannerProps> = ({ webhookUrl, 
       setKeySaved(true)
     } catch (err: any) {
       setKeyError(err?.response?.data?.error || 'Failed to save Stripe account ID')
+    }
+  }
+
+  // Seed 6 realistic demo customers via the webhook simulator so the dashboard
+  // charts and KPI cards have meaningful data to display immediately.
+  const handleSeedData = async () => {
+    setSeeding(true)
+    setSeedError(null)
+    const DEMO_CUSTOMERS: Array<{ email: string; mrrUsd: number }> = [
+      { email: 'alice@acme.com',       mrrUsd: 299 },
+      { email: 'bob@globex.com',       mrrUsd: 149 },
+      { email: 'carol@initech.com',    mrrUsd: 499 },
+      { email: 'dave@umbrella.com',    mrrUsd: 99  },
+      { email: 'eve@hooli.com',        mrrUsd: 199 },
+      { email: 'frank@piedpiper.com',  mrrUsd: 349 },
+    ]
+    try {
+      // Create all as active subscribers
+      await Promise.all(
+        DEMO_CUSTOMERS.map(({ email, mrrUsd }) =>
+          api.post('/api/webhooks-simulator/simulate', {
+            eventType: 'subscription_created',
+            customerEmail: email,
+            mrrUsd,
+          })
+        )
+      )
+      // Simulate one churn and one past_due for realistic spread
+      await api.post('/api/webhooks-simulator/simulate', {
+        eventType: 'subscription_deleted',
+        customerEmail: 'dave@umbrella.com',
+        mrrUsd: 99,
+      })
+      await api.post('/api/webhooks-simulator/simulate', {
+        eventType: 'payment_failed',
+        customerEmail: 'frank@piedpiper.com',
+        mrrUsd: 349,
+      })
+      setSeedDone(true)
+      // Notify parent to invalidate and refetch all dashboard queries
+      if (onDataSeeded) onDataSeeded()
+      // Dismiss the banner after a short delay so the user sees the success state
+      setTimeout(handleDismiss, 1500)
+    } catch (err: any) {
+      setSeedError(err?.response?.data?.error || 'Failed to seed sample data — please try again.')
+    } finally {
+      setSeeding(false)
     }
   }
 
@@ -123,17 +171,23 @@ export const OnboardingBanner: React.FC<OnboardingBannerProps> = ({ webhookUrl, 
               <span className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
                 <Database className="h-3.5 w-3.5" /> 3. Test Demo Data
               </span>
+              {seedDone && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
             </div>
             <p className="text-[11px] text-slate-300">Populate sample metrics to preview dashboard charts</p>
             <button
-              onClick={() => {
-                if (onDataSeeded) onDataSeeded()
-                setDismissed(true)
-              }}
-              className="w-full py-1.5 px-3 bg-emerald-600/80 hover:bg-emerald-600 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+              onClick={handleSeedData}
+              disabled={seeding || seedDone}
+              className="w-full py-1.5 px-3 bg-emerald-600/80 hover:bg-emerald-600 disabled:opacity-60 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
             >
-              <ArrowRight className="h-3.5 w-3.5" /> Load Sample Data
+              {seeding ? (
+                <><ArrowRight className="h-3.5 w-3.5 animate-spin" /> Seeding data…</>
+              ) : seedDone ? (
+                <><CheckCircle2 className="h-3.5 w-3.5" /> Data loaded!  Refreshing…</>
+              ) : (
+                <><ArrowRight className="h-3.5 w-3.5" /> Load Sample Data</>
+              )}
             </button>
+            {seedError && <p className="text-[10px] text-rose-400 font-medium mt-1">{seedError}</p>}
           </div>
         </div>
       </div>
