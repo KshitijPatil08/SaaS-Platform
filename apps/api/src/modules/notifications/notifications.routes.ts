@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from 'express'
 import { prisma } from '../shared/lib/prisma'
+import { requireRole } from '../auth/rbac.middleware'
 
 const router = express.Router()
 
@@ -38,7 +39,8 @@ router.post('/mark-read', async (req: Request, res: Response) => {
 })
 
 // POST /api/notifications — internal: create a notification (called from webhook handlers)
-router.post('/', async (req: Request, res: Response) => {
+// Fix #21: requireRole prevents ANALYST users from injecting arbitrary in-app alerts
+router.post('/', requireRole('OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   const companyId = req.companyId
   if (!companyId) return res.status(401).json({ error: 'Unauthorized' })
 

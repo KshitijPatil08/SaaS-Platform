@@ -2,6 +2,7 @@ import express, { type Request, type Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../shared/lib/prisma'
 import { requireRole } from '../auth/rbac.middleware'
+import { kpiCache } from '../shared/lib/kpi-cache'
 
 const router = express.Router()
 
@@ -18,15 +19,19 @@ const mrrGoalSchema = z.object({
 })
 
 // GET /api/mrr-goal — fetch current company goal
+// Fix #17: Cache for 60s — avoids a live aggregate SQL query on every dashboard render
 router.get('/', async (req: Request, res: Response) => {
   const companyId = req.companyId
   if (!companyId) return res.status(401).json({ error: 'Unauthorized' })
+
+  const cacheKey = `mrr_goal_${companyId}`
+  const cached = kpiCache.get(cacheKey)
+  if (cached) return res.json(cached)
 
   const goal = await (prisma as any).mrrGoal.findUnique({
     where: { company_id: companyId },
   })
 
-  // Also fetch current MRR so the frontend can compute % progress
   const customers = await prisma.customer.aggregate({
     where: { company_id: companyId, status: { in: ['active', 'trialing'] } },
     _sum: { mrr_cents: true },
@@ -34,13 +39,16 @@ router.get('/', async (req: Request, res: Response) => {
 
   const currentMrrCents = customers._sum.mrr_cents ?? 0
 
-  return res.json({
+  const result = {
     goal: goal ?? null,
     currentMrrCents,
     progressPct: goal
       ? Math.min(100, Math.round((currentMrrCents / goal.target_mrr_cents) * 100))
       : null,
-  })
+  }
+
+  kpiCache.set(cacheKey, result, 60_000) // 1-minute TTL
+  return res.json(result)
 })
 
 // PUT /api/mrr-goal — upsert goal (Owner/Admin only)

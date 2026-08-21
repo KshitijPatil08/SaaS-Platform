@@ -44,6 +44,9 @@ export const config = {
   isProduction,
   jwtSecret: requireSecret('JWT_SECRET', 'change-me'),
   jwtRefreshSecret: requireSecret('JWT_REFRESH_SECRET', 'change-me-refresh'),
+  // Fix #11: MFA session token uses its own independent secret so it can be rotated
+  // separately from the main JWT secret. Falls back to a dev-only value — never in prod.
+  mfaSessionSecret: requireSecret('MFA_SESSION_SECRET', 'change-me-mfa'),
   stripeSecretKey: requireSecret('STRIPE_SECRET_KEY', ''),
   stripeWebhookSecret: requireSecret('STRIPE_WEBHOOK_SECRET', ''),
   clientOrigin: process.env.CLIENT_ORIGIN || 'http://localhost:3000',

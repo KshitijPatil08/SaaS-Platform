@@ -113,6 +113,14 @@ app.use('/api/auth/login', authLimiter)
 app.use('/api/auth/register', authLimiter)
 // Protect forgot-password from email enumeration via rate limiting
 app.use('/api/auth/forgot-password', authLimiter)
+// Fix #3: Protect MFA enrollment/confirmation — prevents TOTP brute-force during setup
+app.use('/api/auth/mfa/enroll',   authLimiter)
+app.use('/api/auth/mfa/confirm',  authLimiter)
+// Protect the two-step MFA login flow: credential stuffing on challenge, TOTP brute-force on verify
+app.use('/api/auth/mfa/challenge', authLimiter)
+app.use('/api/auth/mfa/verify', authLimiter)
+// Fix #5: Protect reset-password from token-probe timing attacks and bcrypt DoS
+app.use('/api/auth/reset-password', authLimiter)
 
 // CORS Configuration
 app.use(cors({

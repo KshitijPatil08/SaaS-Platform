@@ -35,6 +35,10 @@ router.post('/:customerId', async (req: Request, res: Response) => {
   if (!body || body.trim().length === 0) {
     return res.status(400).json({ error: 'Note body cannot be empty' })
   }
+  // Fix #18: Cap note body length — prevents DB bloat and massive timeline payloads
+  if (body.trim().length > 5000) {
+    return res.status(400).json({ error: 'Note body must be 5,000 characters or less' })
+  }
 
   // Verify customer belongs to this company
   const customer = await prisma.customer.findFirst({

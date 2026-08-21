@@ -8,6 +8,9 @@ import type { LoginInput, RegisterInput, MfaEnrollInput, MfaConfirmInput } from 
 
 const JWT_SECRET = config.jwtSecret
 const JWT_REFRESH_SECRET = config.jwtRefreshSecret
+// Fix #11: Use config-managed secret so production boot fails fast if not set,
+// rather than falling back to a derivable JWT_SECRET + '_mfa' value.
+const MFA_SESSION_SECRET = config.mfaSessionSecret
 
 export interface AuthTokens {
   accessToken: string
@@ -79,6 +82,61 @@ export const authService = {
       success: true,
       tokens: issueTokens(admin.company_id, admin.email, (admin as any).role),
       companyId: admin.company_id,
+      adminEmail: admin.email,
+    }
+  },
+
+  /**
+   * Issues a short-lived (5 min) MFA challenge token after email+password are validated
+   * but before MFA TOTP is verified. This token is passed to the /mfa page so the
+   * browser never needs to hold the raw password in state.
+   */
+  issueMfaSessionToken(companyId: string, adminEmail: string): string {
+    return jwt.sign({ companyId, adminEmail, type: 'mfa_challenge' }, MFA_SESSION_SECRET, { expiresIn: '5m' })
+  },
+
+  /**
+   * Verifies a short-lived MFA challenge token and returns the embedded payload.
+   * Throws if the token is invalid or expired.
+   */
+  verifyMfaSessionToken(token: string): { companyId: string; adminEmail: string } {
+    try {
+      const payload = jwt.verify(token, MFA_SESSION_SECRET) as any
+      if (payload?.type !== 'mfa_challenge') throw new Error('Invalid token type')
+      return { companyId: payload.companyId, adminEmail: payload.adminEmail }
+    } catch {
+      throw new Error('MFA session token is invalid or expired. Please log in again.')
+    }
+  },
+
+  /**
+   * Completes the MFA login flow: verifies the TOTP code against the MFA session token
+   * and issues full auth tokens on success.
+   */
+  async loginWithMfaSessionToken(mfaSessionToken: string, totpCode: string): Promise<LoginResult> {
+    const { companyId, adminEmail } = authService.verifyMfaSessionToken(mfaSessionToken)
+
+    const admin = await prisma.adminUser.findFirst({
+      where: { email: adminEmail, company_id: companyId },
+    })
+    if (!admin || !admin.mfa_enabled || !admin.mfa_secret) {
+      throw new Error('MFA is not configured for this account.')
+    }
+
+    const ok = speakeasy.totp.verify({
+      secret: admin.mfa_secret,
+      encoding: 'base32',
+      token: totpCode,
+      window: 1,
+    })
+    if (!ok) {
+      throw new Error('Invalid verification code. Please try again.')
+    }
+
+    return {
+      success: true,
+      tokens: issueTokens(companyId, admin.email, (admin as any).role),
+      companyId,
       adminEmail: admin.email,
     }
   },

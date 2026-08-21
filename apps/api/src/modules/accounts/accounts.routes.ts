@@ -1,6 +1,7 @@
 import express from 'express'
 import { z } from 'zod'
 import { verifyJwt } from '../auth/auth.middleware'
+import { requireRole } from '../auth/rbac.middleware'
 import { validateQuery } from '../shared/middleware/validation'
 import { accountsQuerySchema } from './accounts.schema'
 import { accountsService } from './accounts.service'
@@ -64,7 +65,8 @@ const patchAccountSchema = z.object({
 })
 
 // PATCH /api/accounts/:id — partial update of a single customer field(s)
-router.patch('/:id', verifyJwt, async (req, res) => {
+// Fix #11: requireRole guards against ANALYST users modifying revenue-critical fields
+router.patch('/:id', verifyJwt, requireRole('OWNER', 'ADMIN'), async (req, res) => {
   try {
     const companyId = req.companyId
     if (!companyId) return res.status(401).json({ error: 'Unauthorized' })

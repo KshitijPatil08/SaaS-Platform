@@ -6,7 +6,14 @@ const router = express.Router()
 
 const savedSegmentSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),
-  filters: z.record(z.any()).or(z.string().max(2000)),
+  // Fix #19: Cap total serialized size to prevent deeply-nested stack-overflow and DB bloat.
+  // z.record(z.any()) with no depth limit allows {a:{a:{a:...}}} 1000 levels deep.
+  filters: z.any().refine(
+    (v) => {
+      try { return JSON.stringify(v).length <= 4000 } catch { return false }
+    },
+    { message: 'Filters must serialize to 4 KB or less' }
+  ),
 })
 
 // GET /api/saved-segments — list saved segment presets for this company

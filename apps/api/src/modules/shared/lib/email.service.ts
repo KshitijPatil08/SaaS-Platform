@@ -30,7 +30,7 @@ function htmlToText(html: string): string {
   do {
     prev = result
     result = result
-      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<br\s*\/?>\s*/gi, '\n')
       .replace(/<\/p\s*>/gi, '\n\n')
       .replace(/<[^>]*>/g, '') // Remove all complete HTML tags generically
   } while (result !== prev)   // Repeat until no more tags are found (stable)
@@ -45,6 +45,19 @@ function htmlToText(html: string): string {
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&') // last — avoids double-unescaping
     .trim()
+}
+
+/**
+ * Escapes user-controlled strings before interpolating into HTML email bodies.
+ * Prevents stored XSS when customerName/companyName contain <script> or other tags.
+ */
+function escapeHtml(str: string): string {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 async function dispatchEmail(msg: EmailMessage): Promise<EmailResult> {
@@ -126,32 +139,42 @@ export const emailService = {
   async sendTrialExpiryWarning(opts: {
     to: string; customerName: string; daysLeft: number; companyName: string
   }): Promise<EmailResult> {
-    const urgency = opts.daysLeft <= 1 ? '🚨 URGENT:' : opts.daysLeft <= 3 ? '⚠️' : '📅'
+    // Escape user-controlled values before HTML interpolation (stored XSS prevention)
+    const name = escapeHtml(opts.customerName)
+    const company = escapeHtml(opts.companyName)
+    const days = opts.daysLeft
+    const urgency = days <= 1 ? '🚨 URGENT:' : days <= 3 ? '⚠️' : '📅'
     return this.send({
       to: opts.to,
-      subject: `${urgency} Your ${opts.companyName} trial expires in ${opts.daysLeft} day${opts.daysLeft === 1 ? '' : 's'}`,
-      html: `<p>Hi ${opts.customerName},</p><p>Your trial of <strong>${opts.companyName}</strong> expires in <strong>${opts.daysLeft} day${opts.daysLeft === 1 ? '' : 's'}</strong>.</p><p><a href="${config.clientOrigin}/billing">Upgrade now</a> to keep uninterrupted access.</p><p>— The ${opts.companyName} Team</p>`,
+      subject: `${urgency} Your ${company} trial expires in ${days} day${days === 1 ? '' : 's'}`,
+      html: `<p>Hi ${name},</p><p>Your trial of <strong>${company}</strong> expires in <strong>${days} day${days === 1 ? '' : 's'}</strong>.</p><p><a href="${escapeHtml(config.clientOrigin)}/billing">Upgrade now</a> to keep uninterrupted access.</p><p>— The ${company} Team</p>`,
     })
   },
 
   async sendDunningReminder(opts: {
     to: string; customerName: string; mrrCents: number; companyName: string
   }): Promise<EmailResult> {
+    // Escape user-controlled values before HTML interpolation (stored XSS prevention)
+    const name = escapeHtml(opts.customerName)
+    const company = escapeHtml(opts.companyName)
     const mrrFormatted = `$${(opts.mrrCents / 100).toFixed(2)}`
     return this.send({
       to: opts.to,
-      subject: `Action required: Update your payment method for ${opts.companyName}`,
-      html: `<p>Hi ${opts.customerName},</p><p>Your recent payment of <strong>${mrrFormatted}</strong> failed. Please <a href="${config.clientOrigin}/billing">update your payment method</a> to avoid service interruption.</p><p>— The ${opts.companyName} Team</p>`,
+      subject: `Action required: Update your payment method for ${company}`,
+      html: `<p>Hi ${name},</p><p>Your recent payment of <strong>${mrrFormatted}</strong> failed. Please <a href="${escapeHtml(config.clientOrigin)}/billing">update your payment method</a> to avoid service interruption.</p><p>— The ${company} Team</p>`,
     })
   },
 
   async sendHealthAlertToAdmin(opts: {
     adminEmail: string; customerName: string; score: number; companyName: string
   }): Promise<EmailResult> {
+    // Escape user-controlled values before HTML interpolation (stored XSS prevention)
+    const customerName = escapeHtml(opts.customerName)
+    const companyName = escapeHtml(opts.companyName)
     return this.send({
       to: opts.adminEmail,
-      subject: `⚠️ Health Alert: ${opts.customerName} dropped to ${opts.score}/100 in ${opts.companyName}`,
-      html: `<p>A customer health alert was triggered:</p><ul><li><strong>Customer:</strong> ${opts.customerName}</li><li><strong>Health Score:</strong> ${opts.score}/100 (Critical)</li></ul><p><a href="${config.clientOrigin}/accounts">View in Pulse Dashboard</a></p>`,
+      subject: `⚠️ Health Alert: ${customerName} dropped to ${opts.score}/100 in ${companyName}`,
+      html: `<p>A customer health alert was triggered:</p><ul><li><strong>Customer:</strong> ${customerName}</li><li><strong>Health Score:</strong> ${opts.score}/100 (Critical)</li></ul><p><a href="${escapeHtml(config.clientOrigin)}/accounts">View in Pulse Dashboard</a></p>`,
     })
   },
 

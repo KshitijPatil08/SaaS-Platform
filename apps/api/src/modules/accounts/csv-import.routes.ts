@@ -121,6 +121,14 @@ router.post(
     const csvText = req.file.buffer.toString('utf-8')
     const rawRows = parseCsv(csvText)
 
+    // Security: cap at 5,000 rows — a 5MB file with tiny rows could produce 500,000 rows,
+    // causing a CPU/memory spike in the batching loop. Reject before processing starts.
+    if (rawRows.length > 5_000) {
+      return res.status(400).json({
+        error: `CSV exceeds the maximum of 5,000 rows. Split your file and import in batches.`,
+      })
+    }
+
     if (rawRows.length === 0) {
       return res.status(400).json({
         error: 'No valid rows found. Ensure the CSV has a header row and at least one data row.',

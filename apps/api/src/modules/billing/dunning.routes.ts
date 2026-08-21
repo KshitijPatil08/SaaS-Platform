@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express'
 import { prisma } from '../shared/lib/prisma'
 import { kpiCache } from '../shared/lib/kpi-cache'
+import { requireRole } from '../auth/rbac.middleware'
 
 const router = express.Router()
 
@@ -73,8 +74,9 @@ router.get('/summary', async (req: Request, res: Response) => {
 })
 
 // ─── POST /api/dunning/recover ──────────────────────────────────────────────
-
-router.post('/recover', async (req: Request, res: Response) => {
+// Fix #20: requireRole — ANALYST must not be able to manually recover payments
+// and corrupt the dunning audit trail with unauthorized status changes.
+router.post('/recover', requireRole('OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   const companyId = req.companyId
   const { customerId } = req.body as { customerId: string }
 

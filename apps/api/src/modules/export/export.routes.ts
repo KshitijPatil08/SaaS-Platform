@@ -45,9 +45,12 @@ router.get('/', verifyJwt, validateQuery(exportQuerySchema), async (req, res) =>
 
     // Customers export
     if (type === 'customers') {
+      // Fix #13: Hard cap at 10,000 rows — prevents full-table dump and memory exhaustion.
+      // Consumers needing more data should use pagination or chunked exports.
       const customers = await prisma.customer.findMany({
         where: { company_id: companyId },
         orderBy: { created_at: 'desc' },
+        take: 10_000,
       })
 
       if (format === 'json') {
@@ -79,6 +82,7 @@ router.get('/', verifyJwt, validateQuery(exportQuerySchema), async (req, res) =>
         where: { company_id: companyId },
         include: { customer: { select: { name: true, email: true } } },
         orderBy: { churned_at: 'desc' },
+        take: 10_000, // Fix #13: Hard cap to prevent unbounded query
       })
 
       if (format === 'json') {

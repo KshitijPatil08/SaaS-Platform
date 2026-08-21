@@ -47,7 +47,7 @@ let unauthorizedTimer: ReturnType<typeof setTimeout> | null = null
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    const publicPaths = ['/login', '/register']
+    const publicPaths = ['/login', '/register', '/mfa']
     const isPublicPage = publicPaths.some((p) => window.location.pathname.startsWith(p))
 
     if (error.response?.status === 401 && !isPublicPage) {

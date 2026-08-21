@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express'
 import { healthScoreService } from './health-score.service'
 import { prisma } from '../shared/lib/prisma'
+import { requireRole } from '../auth/rbac.middleware'
 
 const router = express.Router()
 
@@ -46,7 +47,8 @@ router.get('/rules', async (req: Request, res: Response) => {
   return res.json(rules)
 })
 
-router.put('/rules', async (req: Request, res: Response) => {
+// Fix #16: OWNER/ADMIN only — ANALYST cannot alter scoring weights that affect all customers
+router.put('/rules', requireRole('OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   const companyId = req.companyId
   if (!companyId) return res.status(401).json({ error: 'Unauthorized' })
 

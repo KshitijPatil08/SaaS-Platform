@@ -3,6 +3,9 @@ import crypto from 'crypto'
 import { prisma } from '../shared/lib/prisma'
 import { requireRole } from '../auth/rbac.middleware'
 
+// Fix #14: Explicit scope allow-list — prevents arbitrary strings being stored and misread
+const ALLOWED_SCOPES = ['read:analytics', 'write:customers', 'read:export', 'write:webhooks'] as const
+
 const router = express.Router()
 
 function hashApiKey(key: string): string {
@@ -44,8 +47,9 @@ router.post('/', requireRole('OWNER', 'ADMIN', 'DEVELOPER'), async (req: Request
 
   const { name, scopes } = req.body as { name: string; scopes?: string[] }
 
-  if (!name || name.trim().length === 0) {
-    return res.status(400).json({ error: 'Key name is required' })
+  // Fix #15: Enforce name max length — prevents multi-MB strings being stored + returned
+  if (name.trim().length > 100) {
+    return res.status(400).json({ error: 'Key name must be 100 characters or less' })
   }
 
   try {
@@ -54,9 +58,10 @@ router.post('/', requireRole('OWNER', 'ADMIN', 'DEVELOPER'), async (req: Request
     const prefix = `pulse_live_${randomHex.slice(0, 6)}...`
     const hashedKey = hashApiKey(fullKey)
 
-    const scopeStr = Array.isArray(scopes) && scopes.length > 0
-      ? scopes.join(',')
-      : 'read:analytics'
+    // Fix #14: Only store scopes that exist in the allow-list; unknown scopes are silently dropped
+    const rawScopes = Array.isArray(scopes) ? scopes : []
+    const validScopes = rawScopes.filter((s) => (ALLOWED_SCOPES as readonly string[]).includes(s))
+    const scopeStr = validScopes.length > 0 ? validScopes.join(',') : 'read:analytics'
 
     const apiKeyRecord = await (prisma as any).apiKey.create({
       data: {

@@ -38,13 +38,18 @@ router.get('/', async (_req: Request, res: Response) => {
 
   const allOperational = Object.values(checks).every(c => c.status === 'operational')
 
-  return res.json({
+  // Fix #23: Omit version in production — fingerprinting the exact app version
+  // helps attackers identify known CVEs. Dev environments still see it for debugging.
+  const response: Record<string, unknown> = {
     status: allOperational ? 'operational' : 'degraded',
     uptimeSeconds,
     checks,
     timestamp: new Date().toISOString(),
-    version: APP_VERSION,
-  })
+  }
+  if (process.env.NODE_ENV !== 'production') {
+    response.version = APP_VERSION
+  }
+  return res.json(response)
 })
 
 export default router

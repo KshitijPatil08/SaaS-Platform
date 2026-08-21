@@ -6,6 +6,7 @@ import SideNav from './components/SideNav'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import MfaVerify from './pages/MfaVerify'
 import Settings from './pages/Settings'
 import AccountsPage from './pages/AccountsPage'
 import FunnelPage from './pages/FunnelPage'
@@ -136,6 +137,7 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/mfa" element={<MfaVerify />} />
               <Route path="/landing" element={<LandingPage />} />
               <Route path="/docs" element={<DocsPage />} />
               <Route path="/status" element={<StatusPage />} />

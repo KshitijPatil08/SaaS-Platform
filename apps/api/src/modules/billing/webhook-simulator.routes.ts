@@ -2,10 +2,13 @@ import express, { type Request, type Response } from 'express'
 import { prisma } from '../shared/lib/prisma'
 import { kpiCache } from '../shared/lib/kpi-cache'
 import { slackService } from '../notifications/slack-notifications.service'
+import { requireRole } from '../auth/rbac.middleware'
 
 const router = express.Router()
 
-router.post('/simulate', async (req: Request, res: Response) => {
+// Fix #22: requireRole — only OWNER/ADMIN may fire simulated webhook events.
+// Without this, an ANALYST could flood churn metrics and trigger Slack alert storms.
+router.post('/simulate', requireRole('OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   const companyId = req.companyId
   if (!companyId) return res.status(401).json({ error: 'Unauthorized' })
 

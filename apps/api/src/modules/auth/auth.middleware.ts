@@ -68,7 +68,9 @@ export const tokenRefreshMiddleware = (
     try {
       const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as JwtPayload
       const newAccessToken = jwt.sign(
-        { companyId: decoded.companyId, adminEmail: decoded.adminEmail },
+        // Fix #4: Carry the role forward — without it, RBAC falls back to 'ADMIN'
+        // for ALL refreshed sessions, silently promoting ANALYST/DEVELOPER accounts.
+        { companyId: decoded.companyId, adminEmail: decoded.adminEmail, role: decoded.role ?? 'ADMIN' },
         JWT_SECRET,
         { expiresIn: '15m' }
       )

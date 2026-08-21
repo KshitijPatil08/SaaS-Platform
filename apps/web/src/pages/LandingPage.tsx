@@ -55,21 +55,15 @@ const PRICING_CARDS = [
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate()
-  const [demoLoading, setDemoLoading] = useState(false)
 
   // Fix #14: page title
   useEffect(() => { document.title = 'Pulse — Self-Hosted SaaS Revenue Intelligence' }, [])
 
-  const handleLaunchDemo = async () => {
-    setDemoLoading(true)
-    try {
-      await api.post('/api/auth/demo')
-      navigate('/')
-    } catch {
-      navigate('/login')
-    } finally {
-      setDemoLoading(false)
-    }
+  // Fix #24: The demo button previously called /api/auth/demo which doesn't exist,
+  // silently falling back to /login and confusing users. Direct navigation to /register
+  // is honest and functional — create an account to see a live dashboard.
+  const handleLaunchDemo = () => {
+    navigate('/register')
   }
 
   return (
@@ -105,10 +99,9 @@ const LandingPage: React.FC = () => {
           </Link>
           <button
             onClick={handleLaunchDemo}
-            disabled={demoLoading}
             className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-600/30 flex items-center gap-1.5 transition-all"
           >
-            {demoLoading ? 'Launching Demo…' : 'Live Interactive Demo'} <Play className="h-3.5 w-3.5 fill-current" />
+            Live Interactive Demo <Play className="h-3.5 w-3.5 fill-current" />
           </button>
         </div>
       </nav>
@@ -133,7 +126,6 @@ const LandingPage: React.FC = () => {
         <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
           <button
             onClick={handleLaunchDemo}
-            disabled={demoLoading}
             className="px-6 py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-xl shadow-purple-600/30 flex items-center gap-2 transition-all text-sm"
           >
             <Play className="h-4 w-4 fill-current" /> Explore Interactive Demo (Instant Access)

@@ -283,7 +283,19 @@ const BillingPage: React.FC = () => {
     try {
       const res = await api.post('/api/vendor-billing/checkout', { plan })
       if (res.data?.url) {
-        window.location.href = res.data.url
+        // Fix #3: Only redirect to known Stripe origins — prevent open redirect phishing
+        const ALLOWED_STRIPE_ORIGINS = [
+          'https://checkout.stripe.com',
+          'https://billing.stripe.com',
+        ]
+        const isSafeUrl = ALLOWED_STRIPE_ORIGINS.some(
+          (origin) => String(res.data.url).startsWith(origin)
+        )
+        if (isSafeUrl) {
+          window.location.href = res.data.url
+        } else {
+          setToastMsg({ type: 'error', text: 'Invalid checkout URL returned by server.' })
+        }
       }
     } catch (err: any) {
       setToastMsg({
@@ -299,7 +311,9 @@ const BillingPage: React.FC = () => {
     setPortalLoading(true)
     try {
       const res = await api.post('/api/vendor-billing/portal')
-      if (res.data?.url) window.open(res.data.url, '_blank')
+      // Fix #8: noopener,noreferrer prevents the opened tab from accessing window.opener
+      // (reverse tab-napping — opened page could redirect the parent to a phishing site)
+      if (res.data?.url) window.open(res.data.url, '_blank', 'noopener,noreferrer')
     } catch (err: any) {
       setToastMsg({
         type: 'error',

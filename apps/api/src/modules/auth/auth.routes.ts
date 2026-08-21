@@ -5,16 +5,26 @@ import { requireRole } from './rbac.middleware'
 import { prisma } from '../shared/lib/prisma'
 import { config } from '../shared/lib/config'
 import { auditService } from '../shared/lib/audit.service'
+import { validateBody } from '../shared/middleware/validation'
+import {
+  mfaChallengeSchema,
+  mfaVerifySchema,
+  registerSchema,
+  resetPasswordSchema,
+  updateProfileSchema,
+} from './auth.schema'
+
+// Valid admin roles — used to guard PUT /team/:id/role
+const VALID_ROLES = ['OWNER', 'ADMIN', 'ANALYST', 'DEVELOPER'] as const
+type AdminRole = (typeof VALID_ROLES)[number]
 
 const router = Router()
 
 // POST /api/auth/register (public)
-router.post('/register', async (req: Request, res: Response) => {
+// Fix #1: validateBody enforces password strength (uppercase + digit) and max lengths
+router.post('/register', validateBody(registerSchema), async (req: Request, res: Response) => {
   try {
     const { companyName, email, password } = req.body
-    if (!companyName || !email || !password) {
-      return res.status(400).json({ error: 'companyName, email, and password are required' })
-    }
     const result = await authService.register({ companyName, email, password })
     return res.status(201).json(result)
   } catch (e) {
@@ -23,7 +33,13 @@ router.post('/register', async (req: Request, res: Response) => {
 })
 
 // POST /api/auth/login (public)
+// Fix #2: DEPRECATED — this single-step flow is vulnerable because it accepts mfaToken
+// in the same request as email+password, enabling MFA bypass when mfaToken is omitted.
+// All new integrations MUST use POST /api/auth/mfa/challenge + /mfa/verify instead.
 router.post('/login', async (req: Request, res: Response) => {
+  res.setHeader('Deprecation', 'true')
+  res.setHeader('Sunset', new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toUTCString())
+  res.setHeader('Link', '</api/auth/mfa/challenge>; rel="successor-version"')
   try {
     const { email, password, mfaToken } = req.body
     if (!email || !password) {
@@ -32,9 +48,6 @@ router.post('/login', async (req: Request, res: Response) => {
     const result = await authService.login({ email, password, mfaToken })
     if (result.tokens) {
       const isProduction = process.env.NODE_ENV === 'production'
-      // SameSite:'none' is required for cross-origin requests (Vercel → Railway).
-      // SameSite:'lax' silently drops cookies on cross-site POST requests.
-      // SameSite:'none' must be paired with Secure:true (HTTPS only).
       const cookieOptions = {
         httpOnly: true,
         secure: isProduction,
@@ -69,12 +82,10 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
 })
 
 // POST /api/auth/reset-password (public)
-router.post('/reset-password', async (req: Request, res: Response) => {
+// Fix #4: validateBody ensures newPassword meets the same strength rules as registration.
+router.post('/reset-password', validateBody(resetPasswordSchema), async (req: Request, res: Response) => {
   try {
     const { token, newPassword } = req.body
-    if (!token || !newPassword) {
-      return res.status(400).json({ error: 'token and newPassword are required' })
-    }
     const { emailService } = await import('../shared/lib/email.service')
     const result = await emailService.resetPassword(token, newPassword)
     return res.json(result)
@@ -97,11 +108,24 @@ router.post('/logout', (_req: Request, res: Response) => {
 })
 
 // POST /api/auth/invite (protected)
+// Fix #7a: Never accept a caller-supplied password — always generate a secure temp one server-side.
+// Fix #7b: Validate the requested role against the allowed enum before persisting.
 router.post('/invite', verifyJwt, requireRole('OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   try {
-    const { email, password, role } = req.body
+    const { email, role } = req.body
     if (!email) return res.status(400).json({ error: 'Email is required' })
-    const result = await authService.inviteAdmin(req.companyId!, email, password, role)
+
+    // Fix #7b: Reject roles that are not in the canonical list
+    const inviteRole = role || 'ADMIN'
+    if (!(VALID_ROLES as readonly string[]).includes(inviteRole)) {
+      return res.status(400).json({
+        error: `Invalid role "${inviteRole}". Allowed values: ${VALID_ROLES.join(', ')}`,
+      })
+    }
+
+    // Fix #7a: Never pass a caller-controlled password — inviteAdmin generates crypto.randomBytes(10)
+    // when no initialPassword is provided. The temp password is returned once for out-of-band delivery.
+    const result = await authService.inviteAdmin(req.companyId!, email, undefined, inviteRole)
     return res.json(result)
   } catch (e) {
     return res.status(400).json({ error: (e as Error).message })
@@ -109,6 +133,7 @@ router.post('/invite', verifyJwt, requireRole('OWNER', 'ADMIN'), async (req: Req
 })
 
 // PUT /api/auth/team/:adminId/role (protected)
+// Fix #8: role is validated against the allowed enum — arbitrary strings are rejected.
 router.put('/team/:adminId/role', verifyJwt, requireRole('OWNER'), async (req: Request, res: Response) => {
   const companyId = req.companyId
   const { adminId } = req.params
@@ -118,10 +143,17 @@ router.put('/team/:adminId/role', verifyJwt, requireRole('OWNER'), async (req: R
     return res.status(400).json({ error: 'adminId and role are required' })
   }
 
+  // Fix #8: Validate role against the canonical list — prevents storing arbitrary strings
+  if (!(VALID_ROLES as readonly string[]).includes(role)) {
+    return res.status(400).json({
+      error: `Invalid role "${role}". Allowed values: ${VALID_ROLES.join(', ')}`,
+    })
+  }
+
   try {
     await (prisma as any).adminUser.updateMany({
       where: { id: adminId, company_id: companyId },
-      data: { role },
+      data: { role: role as AdminRole },
     })
 
     return res.json({ success: true, message: `Team admin role updated to ${role}` })
@@ -131,6 +163,7 @@ router.put('/team/:adminId/role', verifyJwt, requireRole('OWNER'), async (req: R
 })
 
 // DELETE /api/auth/team/:adminId (protected)
+// Fix #9: Prevent an OWNER from deleting themselves — would lock the company out permanently.
 router.delete('/team/:adminId', verifyJwt, requireRole('OWNER'), async (req: Request, res: Response) => {
   const companyId = req.companyId
   const { adminId } = req.params
@@ -140,6 +173,15 @@ router.delete('/team/:adminId', verifyJwt, requireRole('OWNER'), async (req: Req
   }
 
   try {
+    // Fix #9: Look up the requester's own admin record to prevent self-removal
+    const self = await (prisma as any).adminUser.findFirst({
+      where: { email: req.adminEmail, company_id: companyId },
+      select: { id: true },
+    })
+    if (self && self.id === adminId) {
+      return res.status(400).json({ error: 'You cannot remove your own admin account.' })
+    }
+
     await (prisma as any).adminUser.deleteMany({
       where: { id: adminId, company_id: companyId },
     })
@@ -161,12 +203,95 @@ router.get('/profile', verifyJwt, async (req: Request, res: Response) => {
 })
 
 // PUT /api/auth/profile (protected)
-router.put('/profile', verifyJwt, async (req: Request, res: Response) => {
+// Fix #10: validateBody(updateProfileSchema) enforces a strict field whitelist — unknown
+// fields like role, mfa_enabled, mfa_secret are stripped before reaching the service.
+router.put('/profile', verifyJwt, validateBody(updateProfileSchema), async (req: Request, res: Response) => {
   try {
     const updated = await authService.updateProfile(req.companyId!, req.body)
     return res.json(updated)
   } catch (e) {
     return res.status(400).json({ error: (e as Error).message })
+  }
+})
+
+// POST /api/auth/mfa/challenge (public)
+// Step 1 of dedicated-MFA-page flow: validates email+password,
+// returns a short-lived mfaSessionToken (5 min JWT) if MFA is required.
+// Fix #7: validateBody ensures email/password are well-formed before hitting DB.
+router.post('/mfa/challenge', validateBody(mfaChallengeSchema), async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body
+    const result = await authService.login({ email, password })
+    if (!result.mfaRequired) {
+      // MFA not enabled on this account — issue full tokens as normal
+      if (result.tokens) {
+        const isProduction = process.env.NODE_ENV === 'production'
+        const cookieOptions = {
+          httpOnly: true,
+          secure: isProduction,
+          sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
+        }
+        res.cookie('access_token', result.tokens.accessToken, { ...cookieOptions, maxAge: 15 * 60 * 1000 })
+        res.cookie('refresh_token', result.tokens.refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 })
+        // Fix #5: Audit the successful non-MFA login
+        await auditService.log({
+          companyId: result.companyId!,
+          userEmail: email,
+          action: 'LOGIN_SUCCESS',
+          req,
+          details: { mfa: false },
+        })
+        return res.json({ success: true })
+      }
+      // Fix #5: Audit failed login attempt
+      await auditService.log({
+        companyId: result.companyId || 'unknown',
+        userEmail: email,
+        action: 'LOGIN_FAILED',
+        req,
+        details: { reason: 'invalid_credentials' },
+      })
+      return res.status(401).json({ error: 'Invalid credentials' })
+    }
+    // MFA required — issue a short-lived MFA session token
+    const mfaSessionToken = authService.issueMfaSessionToken(result.companyId!, result.adminEmail!)
+    return res.json({ mfaRequired: true, mfaSessionToken })
+  } catch (e) {
+    return res.status(401).json({ error: (e as Error).message })
+  }
+})
+
+// POST /api/auth/mfa/verify (public)
+// Step 2 of dedicated-MFA-page flow: verifies TOTP code against the mfaSessionToken
+// and issues full HttpOnly auth cookies on success.
+// Fix #7: validateBody ensures mfaSessionToken and totpCode are well-formed.
+router.post('/mfa/verify', validateBody(mfaVerifySchema), async (req: Request, res: Response) => {
+  try {
+    const { mfaSessionToken, totpCode } = req.body
+    const result = await authService.loginWithMfaSessionToken(mfaSessionToken, totpCode)
+    if (!result.success || !result.tokens) {
+      return res.status(401).json({ error: 'Invalid verification code' })
+    }
+    const isProduction = process.env.NODE_ENV === 'production'
+    const cookieOptions = {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
+    }
+    res.cookie('access_token', result.tokens.accessToken, { ...cookieOptions, maxAge: 15 * 60 * 1000 })
+    res.cookie('refresh_token', result.tokens.refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 })
+
+    await auditService.log({
+      companyId: result.companyId!,
+      userEmail: result.adminEmail!,
+      action: 'LOGIN_SUCCESS',
+      req,
+      details: { mfa: true, email: result.adminEmail },
+    })
+
+    return res.json({ success: true })
+  } catch (e) {
+    return res.status(401).json({ error: (e as Error).message })
   }
 })
 
