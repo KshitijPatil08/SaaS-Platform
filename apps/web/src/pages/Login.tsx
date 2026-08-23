@@ -7,7 +7,8 @@ type Screen = 'login' | 'forgot' | 'forgot_sent'
 
 const Login: React.FC = () => {
   const [screen, setScreen] = useState<Screen>('login')
-  const [email, setEmail] = useState('admin@pulse.example')
+  // Fix H-2: Don't pre-fill email — hints attackers at the admin email format/account name
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [forgotEmail, setForgotEmail] = useState('')
@@ -15,8 +16,21 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
-  // Display notices passed via router state (e.g. expired MFA session redirect)
-  const routerNotice = (location.state as any)?.notice as string | undefined
+
+  // Fix H-3: Use an allowlist of known notice codes rather than rendering free-form strings
+  // from router state. An attacker who can trigger a navigate() call (e.g. via another XSS)
+  // could otherwise craft arbitrary social-engineering messages displayed to the user.
+  const NOTICE_MESSAGES: Record<string, string> = {
+    'session_expired':    'Your session has expired. Please sign in again.',
+    'mfa_expired':        'MFA session expired. Please log in again.',
+    'password_updated':   'Password updated \u2014 please sign in.',
+    'logged_out':         'You have been signed out.',
+  }
+  const rawNotice = (location.state as any)?.notice as string | undefined
+  // Accept either a known code key or one of the exact pre-approved string values
+  const routerNotice = rawNotice
+    ? (NOTICE_MESSAGES[rawNotice] ?? (Object.values(NOTICE_MESSAGES).includes(rawNotice) ? rawNotice : null))
+    : null
 
   useEffect(() => { document.title = 'Sign In | Pulse' }, [])
 

@@ -17,6 +17,7 @@ import DocsPage from './pages/DocsPage'
 import StatusPage from './pages/StatusPage'
 import ChangePasswordPage from './pages/ChangePasswordPage'
 import MfaSetupPage from './pages/MfaSetupPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import { ThemeProvider } from './hooks/useTheme'
 import HotkeyCheatSheet from './components/HotkeyCheatSheet'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -143,6 +144,9 @@ export default function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/mfa" element={<MfaVerify />} />
+              {/* Fix C-1: Dedicated reset-password page reads token from path segment,
+                  not from a query param that would appear in server logs and Referer headers */}
+              <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
               <Route path="/landing" element={<LandingPage />} />
               <Route path="/docs" element={<DocsPage />} />
               <Route path="/status" element={<StatusPage />} />

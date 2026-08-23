@@ -1,6 +1,7 @@
 import express from 'express'
 import type Stripe from 'stripe'
 import { prisma } from '../shared/lib/prisma'
+import { config } from '../shared/lib/config'
 import { stripe, verifyWebhookSignature, extractCustomerId } from './stripe.client'
 import { billingService } from './billing.service'
 import { healthScoreService } from '../analytics/health-score.service'
@@ -45,7 +46,9 @@ function schedulePostWebhookUpdates(customerId: string): void {
 // app.ts mounts this router at /webhooks/stripe and applies express.raw()
 router.post('/', async (req, res) => {
   const sig = req.headers['stripe-signature'] as string
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || ''
+  // Fix L-3: Use config.stripeWebhookSecret instead of raw process.env access
+  // so the centralized weak-secret and missing-in-prod checks in config.ts apply.
+  const webhookSecret = config.stripeWebhookSecret
 
   let event: Stripe.Event
   try {

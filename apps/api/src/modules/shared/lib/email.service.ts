@@ -203,7 +203,10 @@ export const emailService = {
       data: { token: rawToken, admin_id: admin.id, expires_at: expiresAt, used: false },
     })
 
-    const resetLink = `${config.clientOrigin}/login?reset_token=${rawToken}`
+    // Fix C-1: Use path segment instead of query parameter so the token is NOT
+    // logged in server/CDN/proxy access logs (which log the full URL including query string)
+    // and is not leaked via the Referer header to third-party scripts on the login page.
+    const resetLink = `${config.clientOrigin}/reset-password/${rawToken}`
 
     await this.send({
       to: email,
@@ -211,11 +214,15 @@ export const emailService = {
       html: `<p>Hi,</p><p>Click below to reset your password (expires in 1 hour):</p><p><a href="${resetLink}">Reset Password</a></p><p>If you didn't request this, ignore this email.</p>`,
     })
 
-    console.log(`[email-service] ✉️ Password Reset Email sent to ${email}`)
+    // Fix L-2: Don't log the email — it's PII and unnecessary in production logs
+    if (!config.isProduction) {
+      console.log(`[email-service:dev] ✉️ Password Reset Email sent to ${email}`)
+    }
     return {
       success: true,
       message: `Password reset link generated and dispatched to ${email}`,
-      resetLink: (config as any).isProduction ? undefined : resetLink,
+      // Only expose the reset link in dev mode for testing convenience
+      resetLink: config.isProduction ? undefined : resetLink,
     }
   },
 

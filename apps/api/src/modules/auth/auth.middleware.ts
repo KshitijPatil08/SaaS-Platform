@@ -30,7 +30,7 @@ export const verifyJwt = (req: Request, res: Response, next: NextFunction) => {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as JwtPayload
     req.companyId = decoded.companyId
     req.adminEmail = decoded.adminEmail
     req.adminRole = decoded.role ?? 'ADMIN'
@@ -53,7 +53,7 @@ export const tokenRefreshMiddleware = (
   // If already has valid access token, continue
   if (accessToken) {
     try {
-      const decoded = jwt.verify(accessToken, JWT_SECRET) as JwtPayload
+      const decoded = jwt.verify(accessToken, JWT_SECRET, { algorithms: ['HS256'] }) as JwtPayload
       req.companyId = decoded.companyId
       req.adminEmail = decoded.adminEmail
       req.adminRole = decoded.role ?? 'ADMIN'
@@ -66,7 +66,7 @@ export const tokenRefreshMiddleware = (
   // No valid access token but has refresh token
   if (refreshToken) {
     try {
-      const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as JwtPayload
+      const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET, { algorithms: ['HS256'] }) as JwtPayload
       const newAccessToken = jwt.sign(
         // Fix #4: Carry the role forward — without it, RBAC falls back to 'ADMIN'
         // for ALL refreshed sessions, silently promoting ANALYST/DEVELOPER accounts.

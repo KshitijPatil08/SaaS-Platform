@@ -92,7 +92,11 @@ export const authService = {
    * browser never needs to hold the raw password in state.
    */
   issueMfaSessionToken(companyId: string, adminEmail: string): string {
-    return jwt.sign({ companyId, adminEmail, type: 'mfa_challenge' }, MFA_SESSION_SECRET, { expiresIn: '5m' })
+    return jwt.sign(
+      { companyId, adminEmail, type: 'mfa_challenge' },
+      MFA_SESSION_SECRET,
+      { expiresIn: '5m', algorithm: 'HS256' }
+    )
   },
 
   /**
@@ -101,7 +105,7 @@ export const authService = {
    */
   verifyMfaSessionToken(token: string): { companyId: string; adminEmail: string } {
     try {
-      const payload = jwt.verify(token, MFA_SESSION_SECRET) as any
+      const payload = jwt.verify(token, MFA_SESSION_SECRET, { algorithms: ['HS256'] }) as any
       if (payload?.type !== 'mfa_challenge') throw new Error('Invalid token type')
       return { companyId: payload.companyId, adminEmail: payload.adminEmail }
     } catch {

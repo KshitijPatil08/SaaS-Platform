@@ -71,7 +71,7 @@ app.use(helmet({
       // Allow Google Fonts stylesheet (styleSrcElem) + inline styles for Vite
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       styleSrcElem: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      imgSrc: ["'self'", "data:"],
+      imgSrc: ["'self'", "data:", "https://chart.googleapis.com"],
       // Allow the frontend origin to connect back to this API
       connectSrc: ["'self'", apiOrigin],
       // Allow Google Fonts to serve the actual .woff2 files
@@ -87,6 +87,18 @@ app.use(helmet({
     includeSubDomains: true,
     preload: true,
   },
+  // Fix M-5: Prevent this origin from accessing browser sensors/APIs not needed by the app.
+  // Reduces attack surface if a XSS or injected iframe ever runs in this context.
+  permissionsPolicy: {
+    features: {
+      camera: [],
+      microphone: [],
+      geolocation: [],
+      payment: [],
+      usb: [],
+      bluetooth: [],
+    },
+  } as any,
 }))
 
 // Global API rate limiting — shared across instances via Redis

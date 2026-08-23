@@ -37,20 +37,16 @@ export const auditService = {
       let userAgent = 'unknown'
 
       if (params.req) {
-        const xForwardedFor = params.req.headers['x-forwarded-for']
-        if (typeof xForwardedFor === 'string') {
-          ip = xForwardedFor.split(',')[0].trim()
-        } else if (Array.isArray(xForwardedFor) && xForwardedFor.length > 0) {
-          ip = xForwardedFor[0].trim()
-        } else if (params.req.ip) {
-          ip = params.req.ip
-        } else if (params.req.socket?.remoteAddress) {
-          ip = params.req.socket.remoteAddress
-        }
+        // Fix L-4: trust proxy:1 already makes req.ip the correct client IP after one hop.
+        // Reading X-Forwarded-For manually bypasses that sanitization.
+        ip = params.req.ip || params.req.socket?.remoteAddress || '127.0.0.1'
 
-        const agentHeader = params.req.headers['user-agent']
-        if (typeof agentHeader === 'string') {
-          userAgent = agentHeader
+        // Fix H-1: Truncate User-Agent and strip log-injection characters (\n, \r, \0).
+        // An attacker sending a 1 MB User-Agent on every login floods the audit log table.
+        // Newlines in the UA would pollute structured log exports / SIEM forwarding.
+        const rawAgent = params.req.headers['user-agent']
+        if (typeof rawAgent === 'string') {
+          userAgent = rawAgent.slice(0, 512).replace(/[\n\r\0]/g, ' ')
         }
       }
 

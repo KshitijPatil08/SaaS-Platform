@@ -18,6 +18,21 @@ import {
 const VALID_ROLES = ['OWNER', 'ADMIN', 'ANALYST', 'DEVELOPER'] as const
 type AdminRole = (typeof VALID_ROLES)[number]
 
+/**
+ * Fix H-6: Single shared cookie options factory.
+ * Previously login/mfa routes used sameSite:'none' in prod (correct for cross-origin
+ * Vercel→Railway) while the tokenRefreshMiddleware used sameSite:'strict' (breaks
+ * cross-site requests). Centralising here ensures all cookie writes are consistent.
+ */
+function authCookieOptions() {
+  const isProduction = config.isProduction
+  return {
+    httpOnly:  true,
+    secure:    isProduction,
+    sameSite:  (isProduction ? 'none' : 'lax') as 'none' | 'lax',
+  }
+}
+
 const router = Router()
 
 // POST /api/auth/register (public)
@@ -47,20 +62,9 @@ router.post('/login', async (req: Request, res: Response) => {
     }
     const result = await authService.login({ email, password, mfaToken })
     if (result.tokens) {
-      const isProduction = process.env.NODE_ENV === 'production'
-      const cookieOptions = {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
-      }
-      res.cookie('access_token', result.tokens.accessToken, {
-        ...cookieOptions,
-        maxAge: 15 * 60 * 1000,
-      })
-      res.cookie('refresh_token', result.tokens.refreshToken, {
-        ...cookieOptions,
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      })
+      const opts = authCookieOptions()
+      res.cookie('access_token',  result.tokens.accessToken,  { ...opts, maxAge: 15 * 60 * 1000 })
+      res.cookie('refresh_token', result.tokens.refreshToken, { ...opts, maxAge: 7 * 24 * 60 * 60 * 1000 })
     }
     return res.json(result)
   } catch (e) {
@@ -195,6 +199,8 @@ router.delete('/team/:adminId', verifyJwt, requireRole('OWNER'), async (req: Req
 // GET /api/auth/profile (protected)
 router.get('/profile', verifyJwt, async (req: Request, res: Response) => {
   try {
+    // Fix L-5: Prevent proxies/CDNs from caching sensitive profile data
+    res.setHeader('Cache-Control', 'no-store')
     const profile = await authService.getProfile(req.companyId!)
     return res.json(profile)
   } catch (e) {
@@ -225,14 +231,9 @@ router.post('/mfa/challenge', validateBody(mfaChallengeSchema), async (req: Requ
     if (!result.mfaRequired) {
       // MFA not enabled on this account — issue full tokens as normal
       if (result.tokens) {
-        const isProduction = process.env.NODE_ENV === 'production'
-        const cookieOptions = {
-          httpOnly: true,
-          secure: isProduction,
-          sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
-        }
-        res.cookie('access_token', result.tokens.accessToken, { ...cookieOptions, maxAge: 15 * 60 * 1000 })
-        res.cookie('refresh_token', result.tokens.refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 })
+      const opts = authCookieOptions()
+      res.cookie('access_token',  result.tokens.accessToken,  { ...opts, maxAge: 15 * 60 * 1000 })
+      res.cookie('refresh_token', result.tokens.refreshToken, { ...opts, maxAge: 7 * 24 * 60 * 60 * 1000 })
         // Fix #5: Audit the successful non-MFA login
         await auditService.log({
           companyId: result.companyId!,
@@ -272,14 +273,9 @@ router.post('/mfa/verify', validateBody(mfaVerifySchema), async (req: Request, r
     if (!result.success || !result.tokens) {
       return res.status(401).json({ error: 'Invalid verification code' })
     }
-    const isProduction = process.env.NODE_ENV === 'production'
-    const cookieOptions = {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
-    }
-    res.cookie('access_token', result.tokens.accessToken, { ...cookieOptions, maxAge: 15 * 60 * 1000 })
-    res.cookie('refresh_token', result.tokens.refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 })
+    const opts = authCookieOptions()
+    res.cookie('access_token',  result.tokens.accessToken,  { ...opts, maxAge: 15 * 60 * 1000 })
+    res.cookie('refresh_token', result.tokens.refreshToken, { ...opts, maxAge: 7 * 24 * 60 * 60 * 1000 })
 
     await auditService.log({
       companyId: result.companyId!,

@@ -1,10 +1,19 @@
 import express, { type Request, type Response } from 'express'
 import crypto from 'crypto'
+import { z } from 'zod'
 import { prisma } from '../shared/lib/prisma'
 import { requireRole } from '../auth/rbac.middleware'
+import { validateBody } from '../shared/middleware/validation'
 
 // Fix #14: Explicit scope allow-list — prevents arbitrary strings being stored and misread
 const ALLOWED_SCOPES = ['read:analytics', 'write:customers', 'read:export', 'write:webhooks'] as const
+
+// Fix H-4: Validate name is present and a non-empty string before calling .trim()
+// (missing name was a TypeError crash — 500 response with no body).
+const createApiKeySchema = z.object({
+  name:   z.string({ required_error: 'name is required' }).trim().min(1, 'name cannot be empty').max(100, 'name must be 100 characters or less'),
+  scopes: z.array(z.string()).optional(),
+})
 
 const router = express.Router()
 
@@ -41,16 +50,11 @@ router.get('/', requireRole('OWNER', 'ADMIN', 'DEVELOPER'), async (req: Request,
 
 // ─── POST /api/api-keys ──────────────────────────────────────────────────────
 
-router.post('/', requireRole('OWNER', 'ADMIN', 'DEVELOPER'), async (req: Request, res: Response) => {
+router.post('/', requireRole('OWNER', 'ADMIN', 'DEVELOPER'), validateBody(createApiKeySchema), async (req: Request, res: Response) => {
   const companyId = req.companyId
   if (!companyId) return res.status(401).json({ error: 'Unauthorized' })
 
-  const { name, scopes } = req.body as { name: string; scopes?: string[] }
-
-  // Fix #15: Enforce name max length — prevents multi-MB strings being stored + returned
-  if (name.trim().length > 100) {
-    return res.status(400).json({ error: 'Key name must be 100 characters or less' })
-  }
+  const { name, scopes } = req.body as z.infer<typeof createApiKeySchema>
 
   try {
     const randomHex = crypto.randomBytes(16).toString('hex')
