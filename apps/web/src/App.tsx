@@ -15,6 +15,8 @@ import BillingPage from './pages/BillingPage'
 import LandingPage from './pages/LandingPage'
 import DocsPage from './pages/DocsPage'
 import StatusPage from './pages/StatusPage'
+import ChangePasswordPage from './pages/ChangePasswordPage'
+import MfaSetupPage from './pages/MfaSetupPage'
 import { ThemeProvider } from './hooks/useTheme'
 import HotkeyCheatSheet from './components/HotkeyCheatSheet'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -117,6 +119,9 @@ function AppLayout() {
             <Route path="/health" element={<HealthPage />} />
             <Route path="/billing" element={<BillingPage />} />
             <Route path="/settings" element={<Settings />} />
+            {/* Security-sensitive pages — full-screen, no sidebar, clear URL context */}
+            <Route path="/settings/change-password" element={<ChangePasswordPage />} />
+            <Route path="/settings/mfa-setup" element={<MfaSetupPage />} />
           </Routes>
         </main>
       </div>
