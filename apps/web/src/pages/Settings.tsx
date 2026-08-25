@@ -581,18 +581,26 @@ const Settings: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <select
-                    value={adm.role || 'ADMIN'}
-                    onChange={(e) => {
-                      api.put(`/api/auth/team/${adm.id}/role`, { role: e.target.value }).then(fetchProfile)
-                    }}
-                    className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-semibold text-slate-700 dark:text-slate-300"
-                  >
-                    <option value="OWNER">Owner</option>
-                    <option value="ADMIN">Admin</option>
-                    <option value="ANALYST">Analyst</option>
-                    <option value="DEVELOPER">Developer</option>
-                  </select>
+                  {/* Only OWNER users can change roles — non-OWNERs see a static read-only badge */}
+                  {profile?.admin?.role === 'OWNER' ? (
+                    <select
+                      value={adm.role || 'ADMIN'}
+                      onChange={(e) => {
+                        // Don't allow promoting another user to OWNER via UI
+                        const newRole = e.target.value
+                        api.put(`/api/auth/team/${adm.id}/role`, { role: newRole })
+                          .then(fetchProfile)
+                          .catch(() => setMessage({ type: 'error', text: `Failed to update role for ${adm.email}. Only Owners can change roles.` }))
+                      }}
+                      className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-semibold text-slate-700 dark:text-slate-300"
+                    >
+                      <option value="ADMIN">Admin</option>
+                      <option value="ANALYST">Analyst</option>
+                      <option value="DEVELOPER">Developer</option>
+                    </select>
+                  ) : (
+                    <span className="text-[11px] text-slate-400 font-medium">Role: {adm.role || 'ADMIN'}</span>
+                  )}
 
                   {adm.mfaEnabled ? (
                     <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 font-semibold text-[10px] rounded-full">2FA Active</span>
@@ -600,17 +608,19 @@ const Settings: React.FC = () => {
                     <span className="px-2 py-0.5 bg-slate-100 text-slate-500 dark:bg-slate-800 font-medium text-[10px] rounded-full">2FA Off</span>
                   )}
 
-                  <button
-                    onClick={() => {
-                      if (confirm(`Remove admin access for ${adm.email}?`)) {
-                        api.delete(`/api/auth/team/${adm.id}`).then(fetchProfile)
-                      }
-                    }}
-                    className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors"
-                    title="Revoke Admin Access"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  {profile?.admin?.role === 'OWNER' && (
+                    <button
+                      onClick={() => {
+                        if (confirm(`Remove admin access for ${adm.email}?`)) {
+                          api.delete(`/api/auth/team/${adm.id}`).then(fetchProfile)
+                        }
+                      }}
+                      className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors"
+                      title="Revoke Admin Access"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

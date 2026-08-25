@@ -78,7 +78,11 @@ export const tokenRefreshMiddleware = (
       res.cookie('access_token', newAccessToken, {
         httpOnly: true,
         secure: config.isProduction,
-        sameSite: 'strict',
+        // Fix H-6: Use 'none' in production (cross-origin Vercel→Railway) to match the
+        // cookies set by the login/mfa routes. 'strict' here caused ALL endpoints to
+        // return 401 after the first silent token refresh because the refreshed cookie
+        // was silently dropped by the browser on cross-site fetches.
+        sameSite: config.isProduction ? 'none' : 'lax',
         maxAge: 15 * 60 * 1000,
       })
 
