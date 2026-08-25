@@ -1,26 +1,28 @@
 import express, { type Request, type Response } from 'express'
+import { z } from 'zod'
 import { prisma } from '../shared/lib/prisma'
 import { kpiCache } from '../shared/lib/kpi-cache'
 import { slackService } from '../notifications/slack-notifications.service'
 import { requireRole } from '../auth/rbac.middleware'
+import { validateBody } from '../shared/middleware/validation'
 
 const router = express.Router()
 
-// Fix #22: requireRole — only OWNER/ADMIN may fire simulated webhook events.
-// Without this, an ANALYST could flood churn metrics and trigger Slack alert storms.
-router.post('/simulate', requireRole('OWNER', 'ADMIN'), async (req: Request, res: Response) => {
+const simulateSchema = z.object({
+  // Fix: Strictly validate eventType against the allow-list — prevents arbitrary strings
+  // being stored in the events table (event.name column) via this OWNER/ADMIN-only endpoint.
+  eventType: z.enum(['subscription_created', 'payment_failed', 'subscription_deleted'], {
+    errorMap: () => ({ message: 'eventType must be one of: subscription_created, payment_failed, subscription_deleted' }),
+  }),
+  customerEmail: z.string().email('customerEmail must be a valid email address'),
+  // Cap mrrUsd to prevent wildly negative or astronomically large MRR values being injected
+  mrrUsd: z.number().positive('mrrUsd must be positive').max(1_000_000, 'mrrUsd exceeds maximum').optional(),
+})
+router.post('/simulate', requireRole('OWNER', 'ADMIN'), validateBody(simulateSchema), async (req: Request, res: Response) => {
   const companyId = req.companyId
   if (!companyId) return res.status(401).json({ error: 'Unauthorized' })
 
-  const { eventType, customerEmail, mrrUsd } = req.body as {
-    eventType: 'subscription_created' | 'payment_failed' | 'subscription_deleted'
-    customerEmail: string
-    mrrUsd?: number
-  }
-
-  if (!eventType || !customerEmail) {
-    return res.status(400).json({ error: 'eventType and customerEmail are required' })
-  }
+  const { eventType, customerEmail, mrrUsd } = req.body as z.infer<typeof simulateSchema>
 
   try {
     const mrrCents = Math.round((mrrUsd || 199) * 100)

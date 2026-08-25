@@ -87,19 +87,17 @@ app.use(helmet({
     includeSubDomains: true,
     preload: true,
   },
-  // Fix M-5: Prevent this origin from accessing browser sensors/APIs not needed by the app.
-  // Reduces attack surface if a XSS or injected iframe ever runs in this context.
-  permissionsPolicy: {
-    features: {
-      camera: [],
-      microphone: [],
-      geolocation: [],
-      payment: [],
-      usb: [],
-      bluetooth: [],
-    },
-  } as any,
 }))
+
+// Fix M-5: Permissions-Policy — deny access to browser sensors/APIs not needed by this app.
+// Added as a plain header because this Helmet version doesn't expose permissionsPolicy in types.
+app.use((_req, res, next) => {
+  res.setHeader(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=()'
+  )
+  next()
+})
 
 // Global API rate limiting — shared across instances via Redis
 const limiter = rateLimit({
