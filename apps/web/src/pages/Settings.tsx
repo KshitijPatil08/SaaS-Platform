@@ -80,6 +80,8 @@ const Settings: React.FC = () => {
   const [logsLoading, setLogsLoading] = useState(false)
   const [resettingLockout, setResettingLockout] = useState(false)
   const [exportType, setExportType] = useState<'mrr' | 'customers' | 'churn'>('mrr')
+  const [exportLoading, setExportLoading] = useState<'csv' | 'json' | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   // API Key Management State
   const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([])
@@ -125,6 +127,45 @@ const Settings: React.FC = () => {
   }
 
   const exportBaseUrl = (api.defaults.baseURL || window.location.origin).replace(/\/$/, '')
+
+  /**
+   * Download export using the authenticated axios instance so HttpOnly cookies
+   * are sent with the request. Plain <a href> downloads skip cookies entirely,
+   * causing 402 (export gate) or 401 (auth gate) responses whose JSON body gets
+   * saved as the "downloaded file" instead of the actual CSV/JSON data.
+   */
+  const handleExportData = async (format: 'csv' | 'json') => {
+    setExportLoading(format)
+    setExportError(null)
+    try {
+      const res = await api.get(
+        `/api/export?format=${format}&type=${exportType}&range=last_12_months`,
+        { responseType: 'blob' }
+      )
+      const mimeType = format === 'csv' ? 'text/csv' : 'application/json'
+      const blob = new Blob([res.data], { type: mimeType })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `pulse-${exportType}-export-${new Date().toISOString().slice(0, 10)}.${format}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (e: any) {
+      const status = e?.response?.status
+      if (status === 402) {
+        setExportError('CSV/JSON exports are available on Starter, Pro, and Enterprise plans. Upgrade from the Billing page.')
+      } else if (status === 401 || status === 403) {
+        setExportError('Session expired — please refresh the page and log in again.')
+      } else {
+        setExportError('Export failed. Please try again in a moment.')
+      }
+      setTimeout(() => setExportError(null), 8000)
+    } finally {
+      setExportLoading(null)
+    }
+  }
 
   useEffect(() => {
     fetchProfile()
@@ -879,13 +920,41 @@ const Settings: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 pt-2">
-              <a href={`${exportBaseUrl}/api/export?format=csv&type=${exportType}&range=last_12_months`} download className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 transition-colors shadow-md shadow-purple-500/20">
-                <Download className="h-3.5 w-3.5" /> Download CSV
-              </a>
-              <a href={`${exportBaseUrl}/api/export?format=json&type=${exportType}&range=last_12_months`} download className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl hover:bg-slate-200 transition-colors">
-                <Download className="h-3.5 w-3.5" /> Download JSON
-              </a>
+              <button
+                onClick={() => handleExportData('csv')}
+                disabled={exportLoading !== null}
+                className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 transition-colors shadow-md shadow-purple-500/20 disabled:opacity-50"
+              >
+                <Download className="h-3.5 w-3.5" />
+                {exportLoading === 'csv' ? 'Downloading…' : 'Download CSV'}
+              </button>
+              <button
+                onClick={() => handleExportData('json')}
+                disabled={exportLoading !== null}
+                className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl hover:bg-slate-200 transition-colors disabled:opacity-50"
+              >
+                <Download className="h-3.5 w-3.5" />
+                {exportLoading === 'json' ? 'Downloading…' : 'Download JSON'}
+              </button>
             </div>
+
+            {/* Export error / plan-gate upgrade prompt */}
+            {exportError && (
+              <div className="mt-3 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 flex items-start gap-2.5">
+                <AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">{exportError}</p>
+                  {exportError.includes('plan') && (
+                    <a
+                      href="/billing"
+                      className="inline-block mt-2 px-3 py-1.5 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition-colors"
+                    >
+                      Upgrade Plan →
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Historical CSV Data Migration Wizard */}

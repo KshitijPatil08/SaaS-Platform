@@ -25,10 +25,16 @@ async function resolveCustomer(customerId: string) {
  *
  * Stripe requires HTTP 200 within 30s or it retries. Heavy DB writes
  * (MRR snapshot, health score) must NOT block the webhook response.
- * setImmediate() yields the event loop so Express can flush the response first.
+ *
+ * Strategy:
+ *   1. Try setImmediate (yields to the next iteration of the Node event loop).
+ *   2. Fall back to setTimeout(fn, 0) for environments/runtimes where
+ *      setImmediate may not be available (e.g. some edge/serverless runtimes).
+ *   Both paths are wrapped in try/catch so a scheduling error never crashes
+ *   the webhook handler or swallows the HTTP 200 response.
  */
 function schedulePostWebhookUpdates(customerId: string): void {
-  setImmediate(async () => {
+  const task = async () => {
     try {
       const customer = await resolveCustomer(customerId)
       if (!customer) return
@@ -39,7 +45,19 @@ function schedulePostWebhookUpdates(customerId: string): void {
     } catch (err) {
       console.error('[webhook] Background post-webhook update failed:', err)
     }
-  })
+  }
+
+  try {
+    // setImmediate: preferred — yields after I/O events in Node.js event loop
+    setImmediate(task)
+  } catch {
+    // Fallback for runtimes without setImmediate (e.g. some edge environments)
+    try {
+      setTimeout(task, 0)
+    } catch (schedulingErr) {
+      console.error('[webhook] Failed to schedule post-webhook updates:', schedulingErr)
+    }
+  }
 }
 
 

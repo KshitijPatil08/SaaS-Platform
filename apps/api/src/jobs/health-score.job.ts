@@ -66,18 +66,40 @@ export async function runNightlyHealthScoreJob() {
 }
 
 /**
+ * Graceful shutdown flag.
+ * Set to true on SIGTERM/SIGINT so the worker stops scheduling new runs.
+ * The currently-running job (if any) completes naturally — withJobLock()
+ * releases the DB lock in its finally block regardless of how the process exits.
+ */
+let shutdown = false
+
+function handleShutdownSignal(signal: string) {
+  if (!shutdown) {
+    shutdown = true
+    console.log(`[health-score-job] Received ${signal} — will stop scheduling new runs after current job completes.`)
+  }
+}
+
+process.on('SIGTERM', () => handleShutdownSignal('SIGTERM'))
+process.on('SIGINT',  () => handleShutdownSignal('SIGINT'))
+
+/**
  * Starts the nightly health score worker.
  * Schedules a warm-up run 10 seconds after API boot, then every 24 hours.
+ * Checks the shutdown flag before each scheduled execution so SIGTERM stops
+ * the worker cleanly without leaving orphaned job locks.
  */
 export function startHealthScoreWorker() {
   // Initial run: 10s after boot (stagger from snapshot job's 5s boot)
   setTimeout(() => {
+    if (shutdown) return
     withJobLock('nightly-health-score', 3 * 60 * 60 * 1000, () => runNightlyHealthScoreJob())
       .catch(console.error)
   }, 10_000)
 
   // Recurring run: every 24 hours
   setInterval(() => {
+    if (shutdown) return
     withJobLock('nightly-health-score', 3 * 60 * 60 * 1000, () => runNightlyHealthScoreJob())
       .catch(console.error)
   }, 24 * 60 * 60 * 1000)

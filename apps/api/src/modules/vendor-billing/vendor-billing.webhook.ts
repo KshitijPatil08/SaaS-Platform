@@ -41,9 +41,18 @@ function resolveCompanyIdFromCustomer(
 router.post('/', async (req: Request, res: Response) => {
   const sig = req.headers['stripe-signature'] as string
 
+  // Fix: Always verify the webhook signature regardless of environment.
+  // The previous dev bypass (skipping verification when the secret was unset)
+  // allowed malicious events to be processed — any caller could POST a fake
+  // subscription.deleted and downgrade a company to free.
+  // Set STRIPE_VENDOR_WEBHOOK_SECRET to a Stripe CLI test secret in dev:
+  //   stripe listen --forward-to localhost:5000/webhooks/stripe-vendor
   if (!config.stripeVendorWebhookSecret) {
-    console.warn('[vendor-webhook] STRIPE_VENDOR_WEBHOOK_SECRET not set — skipping signature check in dev')
-    return res.json({ received: true })
+    console.error(
+      '[vendor-webhook] STRIPE_VENDOR_WEBHOOK_SECRET is not set. ' +
+      'Set it to a Stripe CLI test secret (whsec_...) in dev to enable vendor webhooks.'
+    )
+    return res.status(400).send('Webhook configuration error: missing signing secret')
   }
 
   let event: Stripe.Event

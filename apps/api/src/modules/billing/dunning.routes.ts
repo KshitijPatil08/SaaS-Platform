@@ -85,6 +85,24 @@ router.post('/recover', requireRole('OWNER', 'ADMIN'), async (req: Request, res:
   }
 
   try {
+    // Fix: Fetch current status before updating to prevent emitting payment_recovered
+    // on a customer who is already active. Doing so would corrupt the audit trail
+    // (a recovery event without a preceding past_due state) and skew recovery metrics.
+    const current = await prisma.customer.findFirst({
+      where: { id: customerId, company_id: companyId },
+      select: { id: true, status: true, name: true, mrr_cents: true },
+    })
+
+    if (!current) {
+      return res.status(404).json({ error: 'Customer not found' })
+    }
+
+    if (current.status !== 'past_due') {
+      return res.status(409).json({
+        error: `Cannot recover payment: customer is not past_due (current status: "${current.status}"). Recovery only applies to past_due accounts.`,
+      })
+    }
+
     const updated = await prisma.customer.update({
       where: { id: customerId, company_id: companyId },
       data: { status: 'active' },

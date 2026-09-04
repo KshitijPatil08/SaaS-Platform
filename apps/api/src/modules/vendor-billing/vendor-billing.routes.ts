@@ -25,6 +25,25 @@ const PRICE_MAP: Record<string, string> = {
   enterprise: config.stripePriceEnterprise,
 }
 
+// Fix: Validate price IDs at startup so misconfiguration surfaces immediately
+// rather than failing silently when a user first hits the checkout endpoint.
+// In production, missing price IDs should be treated as a fatal config error.
+const missingPriceIds = Object.entries(PRICE_MAP)
+  .filter(([, id]) => !id)
+  .map(([plan]) => plan)
+
+if (missingPriceIds.length > 0) {
+  const msg = `[vendor-billing] Missing Stripe Price IDs for plans: ${missingPriceIds.join(', ')}. ` +
+    `Set STRIPE_PRICE_STARTER, STRIPE_PRICE_PRO, STRIPE_PRICE_ENTERPRISE in your environment.`
+  if (config.isProduction) {
+    // In production, a missing price ID will cause checkout to fail for affected plans.
+    // Log as error so it surfaces in APM / log aggregation dashboards.
+    console.error(msg)
+  } else {
+    console.warn(msg)
+  }
+}
+
 async function getOrCreateVendorCustomer(
   companyId: string,
   adminEmail: string,

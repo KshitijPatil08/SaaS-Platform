@@ -65,9 +65,45 @@ async function dispatchEmail(msg: EmailMessage): Promise<EmailResult> {
   const toArr = Array.isArray(msg.to) ? msg.to : [msg.to]
   const textBody = msg.text ?? htmlToText(msg.html)
 
+  const MAX_ATTEMPTS = 3
+  const BACKOFF_MS = [500, 1000, 2000] // exponential: 500ms → 1s → 2s
+
+  /**
+   * Retry helper: retries the given send function up to MAX_ATTEMPTS times
+   * with exponential backoff. Returns on first success or after all attempts fail.
+   * Permanent failures (HTTP 4xx) are not retried — only transient errors are.
+   */
+  async function withRetry(
+    providerName: string,
+    sendFn: () => Promise<{ ok: boolean; error?: string; messageId?: string }>
+  ): Promise<EmailResult> {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const result = await sendFn()
+        if (result.ok) {
+          return { success: true, provider: providerName, messageId: result.messageId }
+        }
+        // 4xx client error: permanent failure — don't retry
+        return { success: false, provider: providerName, error: result.error }
+      } catch (e) {
+        const isLastAttempt = attempt === MAX_ATTEMPTS
+        if (isLastAttempt) {
+          return { success: false, provider: providerName, error: String(e) }
+        }
+        const delay = BACKOFF_MS[attempt - 1] ?? 2000
+        console.warn(
+          `[email] ${providerName} attempt ${attempt}/${MAX_ATTEMPTS} failed, retrying in ${delay}ms:`,
+          String(e)
+        )
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
+    }
+    return { success: false, provider: providerName, error: 'Max retries exceeded' }
+  }
+
   // Resend (preferred transactional provider)
   if ((config as any).resendApiKey) {
-    try {
+    return withRetry('resend', async () => {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -78,18 +114,21 @@ async function dispatchEmail(msg: EmailMessage): Promise<EmailResult> {
       })
       if (!res.ok) {
         const err = await res.text()
-        return { success: false, provider: 'resend', error: err }
+        // 4xx = permanent error (bad auth, bad payload); surface immediately
+        if (res.status >= 400 && res.status < 500) {
+          return { ok: false, error: err }
+        }
+        // 5xx = transient server error; allow retry
+        throw new Error(`Resend ${res.status}: ${err}`)
       }
       const data = await res.json() as { id?: string }
-      return { success: true, provider: 'resend', messageId: data.id }
-    } catch (e) {
-      return { success: false, provider: 'resend', error: String(e) }
-    }
+      return { ok: true, messageId: data.id }
+    })
   }
 
   // SendGrid fallback
   if ((config as any).sendGridApiKey) {
-    try {
+    return withRetry('sendgrid', async () => {
       const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {
@@ -106,11 +145,15 @@ async function dispatchEmail(msg: EmailMessage): Promise<EmailResult> {
           ],
         }),
       })
-      if (!res.ok) return { success: false, provider: 'sendgrid', error: await res.text() }
-      return { success: true, provider: 'sendgrid' }
-    } catch (e) {
-      return { success: false, provider: 'sendgrid', error: String(e) }
-    }
+      if (!res.ok) {
+        const err = await res.text()
+        if (res.status >= 400 && res.status < 500) {
+          return { ok: false, error: err }
+        }
+        throw new Error(`SendGrid ${res.status}: ${err}`)
+      }
+      return { ok: true }
+    })
   }
 
   // No provider configured — console log for development
@@ -118,6 +161,7 @@ async function dispatchEmail(msg: EmailMessage): Promise<EmailResult> {
   console.log(`[email:dev] BODY:\n${textBody}`)
   return { success: true, provider: 'console-dev' }
 }
+
 
 export const emailService = {
   /**

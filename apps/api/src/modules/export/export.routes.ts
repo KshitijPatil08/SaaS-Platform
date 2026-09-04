@@ -1,11 +1,29 @@
 import express from 'express'
+import rateLimit from 'express-rate-limit'
 import { verifyJwt } from '../auth/auth.middleware'
 import { validateQuery } from '../shared/middleware/validation'
 import { prisma } from '../shared/lib/prisma'
 import { auditService } from '../shared/lib/audit.service'
 import { exportQuerySchema, CSV_HEADER, toCsvRow } from './export.schema'
+import { createRateLimitStore } from '../shared/lib/rateLimitStore'
 
 const router = express.Router()
+
+/**
+ * Export-specific rate limiter: 50 exports per 15 minutes per IP.
+ * Prevents bulk data scraping via repeated export calls.
+ * Backed by Redis when REDIS_URL is set (shared across instances).
+ */
+const exportLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many export requests. Please wait before exporting again.' },
+  store: createRateLimitStore('export'),
+})
+
+router.use(exportLimiter)
 
 /**
  * Sanitize a field for safe CSV output.

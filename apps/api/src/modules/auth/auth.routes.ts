@@ -100,12 +100,12 @@ router.post('/reset-password', validateBody(resetPasswordSchema), async (req: Re
 
 // POST /api/auth/logout (protected or sessionless client cleanup)
 router.post('/logout', (_req: Request, res: Response) => {
-  const isProduction = process.env.NODE_ENV === 'production'
-  const clearOptions = {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
-  }
+  // Fix: Use authCookieOptions() instead of duplicated inline options.
+  // Previously logout used its own copy of the sameSite/secure logic which
+  // could drift from the factory, causing the browser to reject the clearCookie
+  // call on cross-origin requests (Vercel→Railway) because the cookie attributes
+  // didn't match the attributes the cookie was set with.
+  const clearOptions = authCookieOptions()
   res.clearCookie('access_token', clearOptions)
   res.clearCookie('refresh_token', clearOptions)
   return res.json({ success: true })

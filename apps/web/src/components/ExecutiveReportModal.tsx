@@ -34,36 +34,73 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({ isOp
     if (!reportRef.current) return
     setIsExporting(true)
     try {
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 2,       // 2x for sharp text at high DPI
+      const source = reportRef.current
+
+      /**
+       * FIX: The reportRef div lives inside an overflow-hidden modal container.
+       * When that container is shorter than the content, scrollHeight only reflects
+       * the clipped visible area — html2canvas captures a truncated snapshot and the
+       * rest of the PDF pages are blank white.
+       *
+       * Solution: Clone the node into a temporary, absolutely-positioned, full-height
+       * div that is NOT overflow-hidden, render that, then remove it.
+       */
+      const clone = source.cloneNode(true) as HTMLElement
+      clone.style.position = 'fixed'
+      clone.style.top = '0'
+      clone.style.left = '-9999px'
+      clone.style.width = `${source.scrollWidth}px`
+      clone.style.height = 'auto'          // let natural height expand
+      clone.style.overflow = 'visible'
+      clone.style.zIndex = '-1'
+      clone.style.background = '#fff'
+      document.body.appendChild(clone)
+
+      const canvas = await html2canvas(clone, {
+        scale: 2,           // 2x for sharp text at high DPI
         useCORS: true,
         logging: false,
-        // Capture the full scrollable height, not just the visible viewport
-        windowWidth: reportRef.current.scrollWidth,
-        windowHeight: reportRef.current.scrollHeight,
+        width: clone.scrollWidth,
+        height: clone.scrollHeight,
+        windowWidth: clone.scrollWidth,
+        windowHeight: clone.scrollHeight,
       })
 
-      const imgData = canvas.toDataURL('image/png')
+      document.body.removeChild(clone)
 
       // A4 dimensions in mm
       const pdf = new jsPDF('p', 'mm', 'a4')
       const pageWidthMm  = pdf.internal.pageSize.getWidth()   // 210mm
       const pageHeightMm = pdf.internal.pageSize.getHeight()  // 297mm
 
-      // Scale the canvas width to fit the PDF page width exactly
-      const imgWidthMm  = pageWidthMm
-      const imgHeightMm = (canvas.height / canvas.width) * pageWidthMm
+      // Pixels-per-mm for the canvas (at 2x scale, DPI is ~192)
+      const pxPerMm = canvas.width / pageWidthMm
 
-      // How many PDF pages the full image needs
-      const totalPages = Math.ceil(imgHeightMm / pageHeightMm)
+      // How many canvas pixels fit in one PDF page height
+      const pageHeightPx = Math.floor(pageHeightMm * pxPerMm)
+
+      const totalPages = Math.ceil(canvas.height / pageHeightPx)
 
       for (let page = 0; page < totalPages; page++) {
         if (page > 0) pdf.addPage()
 
-        // Shift the image up by (page * pageHeightMm) so the correct
-        // slice of the image appears within the current page's viewport.
-        const yOffset = -(page * pageHeightMm)
-        pdf.addImage(imgData, 'PNG', 0, yOffset, imgWidthMm, imgHeightMm)
+        // Slice the correct vertical strip of the canvas for this page
+        const srcY      = page * pageHeightPx
+        const srcHeight = Math.min(pageHeightPx, canvas.height - srcY)
+
+        // Create a per-page canvas containing only this slice
+        const pageCanvas = document.createElement('canvas')
+        pageCanvas.width  = canvas.width
+        pageCanvas.height = srcHeight
+        const ctx = pageCanvas.getContext('2d')!
+        ctx.drawImage(canvas, 0, srcY, canvas.width, srcHeight, 0, 0, canvas.width, srcHeight)
+
+        const pageImgData = pageCanvas.toDataURL('image/png')
+
+        // Height of this slice in mm (last page may be shorter)
+        const sliceHeightMm = (srcHeight / pxPerMm)
+
+        pdf.addImage(pageImgData, 'PNG', 0, 0, pageWidthMm, sliceHeightMm)
       }
 
       pdf.save(`pulse-executive-report-${new Date().toISOString().slice(0, 10)}.pdf`)
@@ -73,6 +110,7 @@ export const ExecutiveReportModal: React.FC<ExecutiveReportModalProps> = ({ isOp
       setIsExporting(false)
     }
   }
+
 
   return (
     <AnimatePresence>

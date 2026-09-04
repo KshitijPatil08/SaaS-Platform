@@ -115,7 +115,7 @@ export const healthScoreService = {
     let ageScore = 80
     if (accountAgeDays > 365) ageScore = 95
     else if (accountAgeDays > 90) ageScore = 85
-    else if (accountAgeDays < 14) ageScore = 55 // new accounts have higher churn risk
+    else if (accountAgeDays < 14) ageScore = 70 // new accounts have higher churn risk
 
     // ── Weighted composite score ─────────────────────────────────────────────
     // Remaining weight after payment + activity + age goes to the mrrTrend baseline
